@@ -1,6 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// 1. Paste your Supabase project URL and anon/publishable key below.
 // Never put a service_role key in browser code.
 const SUPABASE_URL = "https://mfumtentefcuysibknyl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JGD9JifuMwGF37U2SCxRig_PvgA8psg";
@@ -14,6 +13,7 @@ const dateTime = s => new Date(s).toLocaleString("en-US",{weekday:"short",month:
 let eventCache = [];
 let currentUser = null;
 let invitedEvent = null;
+
 // Public event URLs and private invitation URLs use the same event-page layout.
 // The private invitation token is a bearer credential; visitors need no account.
 const query = new URLSearchParams(window.location.search);
@@ -28,28 +28,35 @@ const validManageToken = manageToken && uuidPattern.test(manageToken) ? manageTo
 const manageUrl = token => `${window.location.origin}${window.location.pathname}?manage=${encodeURIComponent(token)}`;
 const inviteUrl = token => `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(token)}`;
 const publicEventUrl = id => `${window.location.origin}${window.location.pathname}?event=${encodeURIComponent(id)}`;
+
 // Organizer access lives in the header, while the same existing secure dashboard stays below.
 const organizerLink = $("organizer-link");
 const organizerDetails = $("admin-details");
-organizerLink.addEventListener("click", (event) => {
+organizerLink.addEventListener("click", (event) =>
+{
   event.preventDefault();
   organizerDetails.open = true;
   $("admin").scrollIntoView({behavior:"smooth",block:"start"});
   if (!currentUser) window.setTimeout(() => $("admin-email").focus({preventScroll:true}), 350);
 });
+
 // Detail pages should return home for their Events / About navigation.
-if (detailRequested) {
+if (detailRequested)
+{
   $("events-nav").href = "./#events";
   $("about-nav").href = "./#about";
 }
 
 
-if (detailRequested) {
+if (detailRequested)
+{
   document.body.classList.add("event-detail-view");
   document.querySelector(".brand")?.setAttribute("href", "./");
 }
+
 // The private link should not appear in search engine results.
-if (inviteToken !== null || manageToken !== null) {
+if (inviteToken !== null || manageToken !== null)
+{
   // Avoid leaking private invitation or management tokens to external sites.
   const referrer = document.createElement("meta");
   referrer.name = "referrer";
@@ -60,9 +67,11 @@ if (inviteToken !== null || manageToken !== null) {
   noindex.content = "noindex,nofollow";
   document.head.appendChild(noindex);
 }
+
 const dateLabel = value => new Date(value).toLocaleDateString("en-US", {weekday:"long",month:"long",day:"numeric",year:"numeric"});
 const timeLabel = value => new Date(value).toLocaleTimeString("en-US", {hour:"numeric",minute:"2-digit"});
-const eventTimeRange = event => {
+const eventTimeRange = event =>
+{
   const first = new Date(event.starts_at), last = new Date(event.ends_at);
   return first.toDateString() === last.toDateString()
     ? `${timeLabel(event.starts_at)} – ${timeLabel(event.ends_at)}`
@@ -70,33 +79,49 @@ const eventTimeRange = event => {
 };
 
 
-function notice(message, error=false) { const n=$("notice"); n.hidden=!message; n.textContent=message; n.classList.toggle("error",error); }
-function unavailable() {
+function notice(message, error=false)
+{
+  const n=$("notice"); n.hidden=!message; n.textContent=message; n.classList.toggle("error",error);
+}
+
+function unavailable()
+{
   $("events").innerHTML = `<div class="empty-state"><h3>Almost ready to play</h3><p>Connect your Supabase project to load live events. Follow the setup guide included with this website.</p></div>`;
 }
-async function loadEvents() {
+
+async function loadEvents()
+{
   if (!supabase) return unavailable();
+
   const {data,error}=await supabase.rpc("public_open_gym_events");
-  if(error){
+  if(error)
+  {
     const message = "Could not load events. Check the Supabase setup and SQL installation.";
     $("events").textContent = message;
-    if (publicEventId !== null) {
+    if (publicEventId !== null)
+    {
       $("invitation-section").hidden = false;
       $("invitation-event").textContent = message;
     }
     console.error(error);return;
   }
   eventCache=[...(data||[])];
+
   // The invite-only event is deliberately separate from the public listing.
   // Keep it in the local lookup for the registration dialog.
   if (invitedEvent) eventCache.push(invitedEvent);
-  if (publicEventId !== null) {
+
+  if (publicEventId !== null)
+  {
     renderPublicEventDetail(data || []);
   }
+
   if(!(data||[]).length){$("events").innerHTML='<div class="empty-state"><span class="pill">Coming soon</span><h3>No sessions posted yet</h3><p>Check back soon for the next open gym.</p></div>';return;}
   $("events").innerHTML=(data||[]).map(e=>eventCard(e)).join("");
 }
-function eventCard(e) {
+
+function eventCard(e)
+{
   const capacity = Math.max(1, Number(e.capacity) || 1);
   const remaining = Math.max(0, Number(e.spots_remaining) || 0);
   const filled = Math.min(capacity, capacity - remaining);
@@ -108,6 +133,7 @@ function eventCard(e) {
   const date = start.getDate();
   const url = publicEventUrl(e.id);
   const desc = e.description ? `<p class="event-row-description">${esc(e.description)}</p>` : "";
+
   return `<article class="event-row">
     <div class="event-date-tile" aria-label="${esc(dateLabel(e.starts_at))}"><span>${esc(day)}</span><strong>${esc(month)} ${date}</strong></div>
     <div class="event-row-main">
@@ -124,6 +150,7 @@ function eventCard(e) {
     <a class="button view-detail-btn" href="${esc(url)}">View details <svg class="icon"><use href="#i-arrow"/></svg></a>
   </article>`;
 }
+
 function eventDetailPage(e, isPrivate) {
   const remaining = Math.max(0, Number(e.spots_remaining) || 0);
   const capacity = Math.max(1, Number(e.capacity) || 1);
@@ -133,6 +160,7 @@ function eventDetailPage(e, isPrivate) {
   const buttonText = full ? "Join the waitlist" : "Reserve my spot";
   const spotsText = full ? "This session is currently full" : `${remaining} ${remaining === 1 ? "spot" : "spots"} remaining`;
   const description = String(e.description || "Bring your gear, get ready for great games, and enjoy a night of pickup volleyball.").trim();
+
   return `<article class="invite-layout">
     <div class="invite-main-col">
       <div class="invite-hero-panel">
@@ -174,21 +202,27 @@ function eventDetailPage(e, isPrivate) {
     </aside>
   </article>`;
 }
+
 // One database function returns ONLY player_name and registration_status.
 // Private events require their invitation token even when the event ID is known.
-async function loadEventRoster(event, isPrivate) {
+async function loadEventRoster(event, isPrivate)
+{
   const root = $("event-roster");
   if (!root || !supabase) return;
+
   const {data, error} = await supabase.rpc("event_player_roster", {
     p_event_id: event.id,
     p_invite_token: isPrivate ? validInviteToken : null
   });
-  if (error) {
+
+  if (error)
+  {
     console.error("Unable to load roster", error);
     root.querySelector(".roster-count").textContent = "Unavailable";
     root.querySelector(".roster-loading").textContent = "The player roster is temporarily unavailable.";
     return;
   }
+
   const registered = (data || []).filter(p => p.registration_status === "registered");
   const waitlisted = (data || []).filter(p => p.registration_status === "waitlisted");
   const count = root.querySelector(".roster-count");
@@ -212,17 +246,20 @@ async function loadEventRoster(event, isPrivate) {
     </div>`;
 }
 
-function renderPublicEventDetail(events) {
+function renderPublicEventDetail(events)
+{
   const section = $("invitation-section");
   section.hidden = false;
-  if (!validPublicEventId) {
+  if (!validPublicEventId)
+  {
     $("invitation-event").textContent = "This event link is invalid.";
     return;
   }
   // Public RPC only returns published, upcoming, public events. No new SQL
   // or bypass of private-event access is necessary for public detail URLs.
   const event = events.find(e => e.id === validPublicEventId);
-  if (!event) {
+  if (!event)
+  {
     $("invitation-event").textContent = "This public event is unavailable. It may have ended, been unpublished, or become private.";
     document.title = "Event unavailable | Colorado Springs Pickup Volleyball";
     return;
@@ -232,26 +269,33 @@ function renderPublicEventDetail(events) {
   document.title = `${event.title} | Colorado Springs Pickup Volleyball`;
   wireRegistrationButtons($("invitation-event"));
 }
-function wireRegistrationButtons(parent) {
+
+function wireRegistrationButtons(parent)
+{
   parent.querySelectorAll("[data-register]").forEach(b=>b.addEventListener("click",()=>openSignup(b.dataset.register)));
 }
-async function loadInvitedEvent() {
+
+async function loadInvitedEvent()
+{
   invitedEvent=null;
   const section=$("invitation-section");
   if (!inviteToken) { section.hidden=true; invitedEvent=null; return; }
   section.hidden=false;
-  if (!validInviteToken) {
+  if (!validInviteToken)
+  {
     $("invitation-event").innerHTML='<p>This invitation link is invalid.</p>';
     return;
   }
   const {data,error}=await supabase.rpc("private_open_gym_event", {p_invite_token: validInviteToken});
-  if (error) {
+  if (error)
+  {
     console.error(error);
     $("invitation-event").textContent="Unable to load this invitation. Please try again later.";
     return;
   }
   invitedEvent=data?.[0]||null;
-  if (!invitedEvent) {
+  if (!invitedEvent)
+  {
     $("invitation-event").textContent="This private event is unavailable. Check the link with the organizer.";
     return;
   }
@@ -261,12 +305,15 @@ async function loadInvitedEvent() {
   wireRegistrationButtons($("invitation-event"));
   await loadEvents();
 }
-function openSignup(id) {
+
+function openSignup(id)
+{
   const e=eventCache.find(x=>x.id===id); if(!e)return;
   $("event-id").value=id;$("signup-title").textContent=e.title;
   $("signup-summary").textContent=`${dateTime(e.starts_at)} · ${e.venue} · ${money(e.price_cents)}${e.spots_remaining<=0?" · This registration will join the waitlist.":""}`;
   $("signup-error").textContent="";$("signup-dialog").showModal();
 }
+
 $("close-dialog").addEventListener("click",()=>$("signup-dialog").close());
 $("signup-form").addEventListener("submit",async ev=>{
   ev.preventDefault(); if(!supabase){$("signup-error").textContent="The website isn't connected to Supabase yet.";return;}
@@ -295,22 +342,26 @@ $("signup-form").addEventListener("submit",async ev=>{
   if (validInviteToken) await loadInvitedEvent();
   else await loadEvents();
 });
+
 // Self-service management uses its own bearer token, not event IDs, emails,
 // or organizer accounts. The database returns only name/event/status.
 async function loadManageRegistration() {
   if (manageToken === null || !supabase) return;
   const root = $("invitation-event");
   $("invitation-section").hidden = false;
-  if (!validManageToken) {
+  if (!validManageToken)
+  {
     root.innerHTML = `<div class="manage-card"><h1>Invalid registration link</h1><p>Please check the link you received.</p></div>`;
     return;
   }
   const {data,error} = await supabase.rpc("my_open_gym_registration", {p_manage_token:validManageToken});
-  if (error || !data?.length) {
+  if (error || !data?.length)
+  {
     if (error) console.error(error);
     root.innerHTML = `<div class="manage-card"><h1>Registration not found</h1><p>This link may be invalid, or the event may have been deleted. Ask the organizer for assistance.</p></div>`;
     return;
   }
+
   const reg = data[0];
   const cancelled = reg.registration_status === "cancelled";
   root.innerHTML = `<article class="manage-card">
@@ -340,13 +391,17 @@ async function loadManageRegistration() {
 $("copy-registration-link").addEventListener("click", async ev => {
   const url = ev.currentTarget.dataset.copyLink;
   if (!url) return;
-  try {
+  try
+  {
     await navigator.clipboard.writeText(url);
     ev.currentTarget.textContent = "Link copied!";
-  } catch {
+  }
+  catch
+  {
     window.prompt("Copy your registration management link:",url);
   }
 });
+
 $("login-form").addEventListener("submit",async ev=>{
   ev.preventDefault();if(!supabase){$("admin-message").textContent="Connect Supabase first using app.js.";return;}
   const {error}=await supabase.auth.signInWithPassword({email:$("admin-email").value,password:$("admin-password").value});
@@ -354,6 +409,7 @@ $("login-form").addEventListener("submit",async ev=>{
 });
 $("signout").addEventListener("click",async()=>{await supabase.auth.signOut();await refreshAdmin();});
 supabase?.auth.onAuthStateChange(()=>setTimeout(refreshAdmin,0));
+
 async function refreshAdmin(){
   if(!supabase)return;
   const {data:{session}}=await supabase.auth.getSession();currentUser=session?.user||null;
@@ -361,15 +417,19 @@ async function refreshAdmin(){
   organizerLink.textContent = currentUser ? "Organizer Dashboard" : "Organizer Login";
   if(currentUser)await loadAdminEvents();
 }
+
 // The organizer selects a date (initially blank), hour (6 PM by default),
 // quarter-hour minutes, and duration. The end is computed automatically.
-function selectedDurationMinutes() {
+function selectedDurationMinutes()
+{
   const value = $("event-duration").value === "custom"
     ? Number($("event-duration-custom").value)
     : Number($("event-duration").value);
   return Number.isInteger(value) && value >= 1 && value <= 10080 ? value : null;
 }
-function calculatedEventTimes() {
+
+function calculatedEventTimes()
+{
   const date = $("event-date").value;
   if (!date) return null;
   const hour = Number($("event-hour").value);
@@ -385,7 +445,9 @@ function calculatedEventTimes() {
       `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,"0")}-${String(start.getDate()).padStart(2,"0")}` !== date) return null;
   return {start, end: new Date(start.getTime() + minutes * 60_000)};
 }
-function updateEventEndPreview() {
+
+function updateEventEndPreview()
+{
   const custom = $("event-duration").value === "custom";
   $("custom-duration-wrap").hidden = !custom;
   $("event-duration-custom").required = custom;
@@ -394,16 +456,20 @@ function updateEventEndPreview() {
     ? times.end.toLocaleString("en-US", {weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"})
     : $("event-date").value ? "Choose a valid start time and duration" : "Choose an event date";
 }
+
 $("event-date").addEventListener("input",updateEventEndPreview);
 $("event-date").addEventListener("change",updateEventEndPreview);
 $("event-hour").addEventListener("change",updateEventEndPreview);
 $("event-minute").addEventListener("change",updateEventEndPreview);
 $("event-duration").addEventListener("change",updateEventEndPreview);
 $("event-duration-custom").addEventListener("input",updateEventEndPreview);
-function clearEditor(){
+
+function clearEditor()
+{
   $("event-form").reset();$("event-date").value="";$("event-hour").value="18";$("event-minute").value="00";$("edit-id").value="";$("event-venue").value="Hillside Community Center";$("event-price").value="5";$("event-capacity").value="24";$("event-status").value="published";$("event-visibility").value="public";$("event-duration").value="180";$("event-duration-custom").value="180";$("editor-heading").textContent="Create an event";$("event-save-message").textContent="";
   updateEventEndPreview();
 }
+
 $("reset-event").addEventListener("click",clearEditor);
 $("event-form").addEventListener("submit",async ev=>{
   ev.preventDefault();if(!supabase||!currentUser)return;
@@ -421,6 +487,7 @@ $("event-form").addEventListener("submit",async ev=>{
     await loadAdminEvents();
   }
 });
+
 async function loadAdminEvents(){
   const {data:events,error}=await supabase.from("events").select("*").order("starts_at",{ascending:false});
   if(error){$("admin-events").textContent=error.message;return;}
@@ -503,11 +570,16 @@ async function loadAdminEvents(){
   document.querySelectorAll("[data-copy-manage]").forEach(b=>b.addEventListener("click",async()=>{
     if (!uuidPattern.test(b.dataset.copyManage || "")) {alert("This player does not have a management link yet. Check the Batch 3 SQL upgrade.");return;}
     const url = manageUrl(b.dataset.copyManage);
-    try {
+    try
+    {
       await navigator.clipboard.writeText(url);
       const label = b.textContent; b.textContent = "Copied!";
       window.setTimeout(()=>b.textContent=label,2000);
-    } catch {window.prompt("Copy the private management link:",url);}
+    }
+    catch
+    {
+      window.prompt("Copy the private management link:",url);
+    }
   }));
   document.querySelectorAll("[data-payment]").forEach(s=>s.addEventListener("change",async()=>{const {error}=await supabase.from("registrations").update({payment_status:s.value}).eq("id",s.dataset.payment);if(error)alert(error.message);}));
   document.querySelectorAll("[data-cancel]").forEach(b=>b.addEventListener("click",async()=>{
@@ -518,7 +590,9 @@ async function loadAdminEvents(){
     await loadEvents(); if(validInviteToken) await loadInvitedEvent(); await loadAdminEvents();
   }));
 }
-function editEvent(e){
+
+function editEvent(e)
+{
   $("edit-id").value=e.id;$("event-title").value=e.title;$("event-venue").value=e.venue;
   const localStart=toLocal(e.starts_at);
   $("event-date").value=localStart.slice(0,10);
@@ -542,9 +616,15 @@ function editEvent(e){
     : "";
   $("event-form").scrollIntoView({behavior:"smooth",block:"start"});
 }
+
 function toLocal(s){const d=new Date(s);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
-if(!configured){unavailable();$("admin-message").textContent="Setup required: add the Supabase URL and anon key in app.js.";}
-else {
+
+if(!configured)
+{
+  unavailable();$("admin-message").textContent="Setup required: add the Supabase URL and anon key in app.js.";
+}
+else
+{
   loadEvents();
   if (inviteToken !== null) loadInvitedEvent();
   if (manageToken !== null) loadManageRegistration();
