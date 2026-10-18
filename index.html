@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#072b44">
+  <meta name="description" content="Sign up for Colorado Springs pickup volleyball at Hillside Community Center. Browse open gyms, reserve your spot, and play.">
+  <title>Colorado Springs Pickup Volleyball</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<svg class="svg-symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.3 2"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.7"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M2 21v-2a6 6 0 0 1 12 0v2H2ZM17 5a3 3 0 0 1 0 6m1 4a5 5 0 0 1 4 5v1h-5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+</svg>
+<header class="site-header" id="top">
+  <div class="nav-wrap">
+    <a class="brand" href="./" aria-label="Colorado Springs Pickup Volleyball home">
+      <img src="favicon-192.png" alt="" width="53" height="53">
+      <span>COLORADO SPRINGS <strong>PICKUP VOLLEYBALL</strong></span>
+    </a>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="./#events" id="events-nav">Events</a>
+      <a href="./#about" id="about-nav">About</a>
+      <a href="#admin" id="organizer-link" class="nav-organizer">Organizer Login</a>
+    </nav>
+  </div>
+</header>
+<section class="hero" aria-label="Welcome to Colorado Springs Pickup Volleyball">
+  <div class="hero-photo" aria-hidden="true"></div>
+  <div class="hero-overlay" aria-hidden="true"></div>
+  <div class="hero-container">
+    <div class="hero-copy">
+      <h1>Colorado Springs<br>Pickup Volleyball</h1>
+      <p>Casual games. Good people. All skill levels welcome.</p>
+      <div class="hero-highlights">
+        <div class="hero-highlight"><svg class="icon"><use href="#i-people"/></svg><span>All Skill Levels<br>Welcome</span></div>
+        <div class="hero-highlight"><svg class="icon"><use href="#i-calendar"/></svg><span>Easy Online<br>Registration</span></div>
+        <div class="hero-highlight"><svg class="icon"><use href="#i-pin"/></svg><span>Hillside Community<br>Center</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+<main>
+  <div id="notice" class="notice" role="status" hidden></div>
+  <div id="registration-link-box" class="registration-link-box" hidden>
+    <h2>Save your registration link</h2>
+    <p>You can use this private link to check your registration status or cancel if your plans change. <strong>Keep it somewhere safe:</strong> automatic emails aren't enabled yet, and anyone with this link could cancel your registration.</p>
+    <div class="manage-link-actions"><a id="registration-link" class="button secondary" href="#">Manage registration</a><button class="button" type="button" id="copy-registration-link">Copy my link</button></div>
+  </div>
+  <section id="invitation-section" class="invitation-section" aria-label="Event details" hidden>
+    <div class="invite-topline">
+      <a class="invite-back-link" href="./">← All open gyms</a>
+      <span class="invite-topline-note">COLORADO SPRINGS PICKUP VOLLEYBALL</span>
+    </div>
+    <div id="invitation-event" class="invitation-content" aria-live="polite"><p class="invite-loading">Loading event details…</p></div>
+  </section>
+  <section class="events-section" id="events-section" aria-labelledby="events-heading">
+    <div class="section-title-bar">
+      <div><span class="section-kicker">FIND YOUR NEXT GAME</span><h2 id="events-heading">Upcoming Events</h2></div>
+      <a href="#events" class="view-all">View all events <svg class="icon"><use href="#i-arrow"/></svg></a>
+    </div>
+    <section id="events" class="event-list" aria-live="polite"><p class="muted">Loading events…</p></section>
+  </section>
+  <section class="about-section" id="about" aria-labelledby="about-heading">
+    <div class="about-lead"><span class="section-kicker">PLAY MORE VOLLEYBALL</span><h2 id="about-heading">Good games start here.</h2><p>We're a community pickup volleyball group in Colorado Springs. Register online to save your spot, then pay the organizer directly to help cover the gym rental.</p></div>
+    <div class="about-steps">
+      <article class="about-step"><span class="step-icon"><svg class="icon"><use href="#i-calendar"/></svg></span><h3>Find a session</h3><p>Choose an upcoming open gym that works for you.</p></article>
+      <article class="about-step"><span class="step-icon"><svg class="icon"><use href="#i-check"/></svg></span><h3>Save your spot</h3><p>Register in seconds. No account required.</p></article>
+      <article class="about-step"><span class="step-icon"><svg class="icon"><use href="#i-people"/></svg></span><h3>Show up & play</h3><p>Contribute by Venmo, cash, or Apple Cash and enjoy the game.</p></article>
+    </div>
+  </section>
+</main>
+<dialog id="signup-dialog">
+  <form id="signup-form" class="dialog-form">
+    <button type="button" class="close" id="close-dialog" aria-label="Close">×</button>
+    <p class="form-kicker">GET IN THE GAME</p><h2 id="signup-title">Register for open gym</h2>
+    <p id="signup-summary" class="muted"></p>
+    <input type="hidden" id="event-id">
+    <label>Full name<input id="player-name" maxlength="100" required autocomplete="name"></label>
+    <label>Email address<input id="player-email" type="email" maxlength="254" required autocomplete="email"></label>
+    <label>Phone (optional)<input id="player-phone" type="tel" maxlength="30" autocomplete="tel"></label>
+    <label>How will you pay?
+      <select id="payment-method" required><option value="venmo">Venmo</option><option value="cash">Cash at the gym</option><option value="apple_cash">Apple Cash</option></select>
+    </label>
+    <p class="signup-roster-notice"><strong>Player roster:</strong> Your name will appear on this event's player roster, visible to anyone who can access its event page. Your email and phone number are only available to organizers.</p>
+    <p class="small muted">Registration reserves your spot when available. Payment is made separately to the organizer; do not enter payment or bank details here.</p>
+    <button class="button" type="submit" id="submit-signup">Confirm registration</button>
+    <p id="signup-error" class="error" role="alert"></p>
+  </form>
+</dialog>
+<section id="admin" class="admin-shell" aria-label="Organizer access">
+  <details id="admin-details"><summary>Organizer dashboard <span class="summary-chevron" aria-hidden="true">⌄</span></summary>
+    <div class="admin-content">
+      <div class="admin-login" id="admin-login">
+        <div class="admin-login-intro"><span class="admin-lock"><svg class="icon"><use href="#i-lock"/></svg></span><h2>Organizer Login</h2><p>Sign in to create sessions, manage registrations, and track payments.</p></div>
+        <form id="login-form" class="login-form"><label>Organizer email<input id="admin-email" type="email" required autocomplete="username" placeholder="you@example.com"></label><label>Password<input id="admin-password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign in to dashboard</button></form>
+        <p id="admin-message" class="small muted" role="status"></p>
+      </div>
+      <div id="admin-panel" hidden>
+        <div class="admin-head"><div><span class="section-kicker">ORGANIZER TOOLS</span><h2>Manage Open Gyms</h2></div><button id="signout" class="button secondary">Sign out</button></div>
+        <form id="event-form" class="event-editor">
+          <div class="editor-topline"><h3 id="editor-heading">Create an event</h3><span class="editor-aside">All changes save to your Supabase database</span></div>
+          <input type="hidden" id="edit-id">
+          <div class="form-grid">
+            <label>Event title<input id="event-title" required maxlength="120" placeholder="Saturday Open Gym"></label>
+            <label>Venue<input id="event-venue" required maxlength="180" value="Hillside Community Center"></label>
+            <label>Event date<input id="event-date" type="date" required><span class="field-help">Choose the event date. No date is preselected.</span></label>
+            <div class="start-time-field" role="group" aria-labelledby="event-start-heading">
+              <span id="event-start-heading" class="group-label">Start time</span>
+              <div class="start-time-inputs">
+                <label class="start-hour-label">Hour<select id="event-hour" aria-label="Start hour" required><option value="00">12:00 AM</option><option value="01">1:00 AM</option><option value="02">2:00 AM</option><option value="03">3:00 AM</option><option value="04">4:00 AM</option><option value="05">5:00 AM</option><option value="06">6:00 AM</option><option value="07">7:00 AM</option><option value="08">8:00 AM</option><option value="09">9:00 AM</option><option value="10">10:00 AM</option><option value="11">11:00 AM</option><option value="12">12:00 PM</option><option value="13">1:00 PM</option><option value="14">2:00 PM</option><option value="15">3:00 PM</option><option value="16">4:00 PM</option><option value="17">5:00 PM</option><option value="18" selected>6:00 PM</option><option value="19">7:00 PM</option><option value="20">8:00 PM</option><option value="21">9:00 PM</option><option value="22">10:00 PM</option><option value="23">11:00 PM</option></select></label>
+                <label class="start-minute-label">Minutes<select id="event-minute" aria-label="Start minutes" required>
+                  <option value="00" selected>:00</option><option value="15">:15</option><option value="30">:30</option><option value="45">:45</option>
+                </select></label>
+              </div>
+              <span class="field-help">Defaults to 6:00 PM. Only quarter-hour options are available.</span>
+            </div>
+            <label>Duration<select id="event-duration" required>
+              <option value="60">1 hour</option><option value="90">1 hour 30 minutes</option><option value="120">2 hours</option><option value="150">2 hours 30 minutes</option><option value="180" selected>3 hours (default)</option><option value="210">3 hours 30 minutes</option><option value="240">4 hours</option><option value="270">4 hours 30 minutes</option><option value="300">5 hours</option><option value="360">6 hours</option><option value="custom">Custom duration…</option>
+            </select></label>
+            <label id="custom-duration-wrap" hidden>Custom duration (minutes)<input id="event-duration-custom" type="number" min="1" max="10080" step="1" value="180"></label>
+            <div class="event-end-preview" role="status" aria-live="polite" aria-atomic="true"><span class="event-end-preview-label">Calculated end time</span><strong id="event-end-preview">Choose an event date</strong><span class="event-end-preview-hint">Calculated automatically using the selected duration.</span></div>
+            <label>Price per player (USD)<input id="event-price" type="number" min="0" step="0.01" value="5" required></label>
+            <label>Capacity<input id="event-capacity" type="number" min="1" max="500" value="24" required></label>
+            <label>Payment handle / instructions<input id="payment-instructions" maxlength="240" placeholder="Venmo: @YourHandle"></label>
+            <label>Visibility<select id="event-visibility"><option value="public">Public — listed on the website</option><option value="private">Private — invitation link only</option></select></label>
+            <label>Registration status<select id="event-status"><option value="published">Published</option><option value="draft">Draft</option><option value="cancelled">Cancelled</option></select></label>
+          </div>
+          <p class="small muted">Private events stay off the homepage. Anyone with the direct link can sign up; this is not identity-verified access.</p>
+          <label>Event details<textarea id="event-description" rows="3" maxlength="1000" placeholder="Skill level, parking, what to bring…"></textarea></label>
+          <div class="button-row"><button class="button" type="submit">Save event</button><button class="button secondary" type="button" id="reset-event">Clear form</button></div>
+          <p id="event-save-message" class="small muted" role="status"></p>
+        </form>
+        <h3 class="registrations-heading">Registrations and payments</h3><div id="admin-events"></div>
+      </div>
+    </div>
+  </details>
+</section>
+<footer class="site-footer"><span>© Colorado Springs Pickup Volleyball</span><span>Community play · Cost-sharing only</span></footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>
