@@ -201,3 +201,52 @@ main{padding:27px 15px 45px}.section-title-bar h2{font-size:29px}.section-kicker
 @media(max-width:650px){.registration-link-box{padding:18px}.manage-card{padding:23px 18px}.manage-link-actions .button{width:100%;justify-content:center}}
 
 .admin-reg-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+/* Phase 3 / peer-feedback patch: separate organizer view and modal event editor. */
+body:not(.organizer-view) .admin-shell{display:none!important}
+body.organizer-view .hero,body.organizer-view main{display:none!important}
+body.organizer-view .admin-shell{display:block;max-width:1440px;padding:40px clamp(18px,5vw,70px) 72px;margin:0 auto;min-height:calc(100vh - 176px)}
+body.organizer-view .site-nav .nav-organizer{background:#0b5261;color:#f0fbfd}
+#notice:not([hidden]){max-width:1280px;margin:18px auto;padding:15px 22px}
+.admin-login-view{display:grid;place-items:center;padding:32px 0 48px}
+.admin-login-card{background:#fff;box-shadow:0 18px 50px rgba(15,47,72,.10);border:1px solid var(--line);border-radius:20px;max-width:510px;width:100%;padding:40px 45px}
+.admin-login-card .admin-login-intro h1{margin:8px 0 10px;font-size:35px;letter-spacing:-.035em}
+.back-to-events{display:block;text-align:center;font-size:13px;font-weight:700;color:#077888;margin-top:23px}
+.admin-page-head{align-items:center;margin-bottom:22px;gap:30px}
+.admin-page-head h1{font-size:clamp(31px,3vw,43px);letter-spacing:-.045em;margin:5px 0 0;line-height:1.15}
+.admin-page-head p{margin:6px 0 0;font-size:13px}
+.dashboard-head-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.dashboard-head-actions .button{min-height:43px;white-space:nowrap;padding:11px 16px}
+.admin-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:0 0 35px}
+.admin-stat{background:#fff;border:1px solid var(--line);border-radius:13px;padding:21px 22px;display:grid;gap:6px;box-shadow:var(--card-shadow)}
+.admin-stat span{color:#54707f;font-weight:750;font-size:12px}.admin-stat strong{font-size:31px;font-weight:800;color:var(--navy);line-height:1.1}
+.dashboard-list-toolbar{display:flex;justify-content:space-between;gap:20px;align-items:end;border-bottom:1px solid var(--line);padding-bottom:15px}
+.dashboard-list-toolbar h2{font-size:25px;letter-spacing:-.03em;margin:3px 0 0}
+.dashboard-filter{flex-direction:row;align-items:center;white-space:nowrap;gap:9px}
+.dashboard-filter select{min-width:145px}
+.dashboard-empty{padding:46px 28px;background:#fff;border:1px solid var(--line);border-radius:12px;text-align:center;color:#577180;margin-top:15px}
+.admin-event{box-shadow:var(--card-shadow);padding:23px 26px;margin:15px 0}
+.admin-event h4{margin:13px 0 4px;font-size:21px}
+.admin-event .admin-actions{margin:18px 0}
+.admin-event .admin-actions .button{min-height:36px}
+.event-row-private-label{font-size:10px;letter-spacing:.02em;padding:4px 10px;margin-top:3px;margin-bottom:4px}
+.event-card-actions{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+.event-card-actions .button{width:100%}
+.event-card-actions .copy-invite-card{font-size:12px;padding:10px;min-height:42px}
+.email-hint{font-size:12px!important;font-weight:500!important;line-height:1.55;color:#4c6e7c;margin:-7px 0 0!important}
+.email-hint-warning{color:#a8640f;font-weight:700!important}
+.editor-dialog{width:min(930px,calc(100vw - 28px));max-width:930px;max-height:92dvh;border:1px solid #b7d2db;border-radius:20px;padding:0;box-shadow:0 30px 110px #061c30aa;background:#fff;color:var(--ink);overscroll-behavior:contain}
+.editor-dialog::backdrop{background:rgba(3,22,35,.73);backdrop-filter:blur(3px)}
+.editor-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:23px 29px 17px;border-bottom:1px solid var(--line);background:#fff;position:sticky;top:0;z-index:2}
+.editor-dialog-head h2{margin:4px 0 0;font-size:25px;letter-spacing:-.025em}
+.editor-dialog-close{border:0;background:#eff5f7;border-radius:50%;color:#456578;font-size:27px;line-height:1;width:35px;height:35px}
+.editor-dialog .event-editor{background:white;border:0;border-radius:0;padding:24px 29px 31px}
+.editor-dialog .editor-topline{margin-bottom:15px}
+.editor-dialog .editor-topline h3{font-size:17px}
+.editor-dialog .editor-aside{font-size:11px}
+.editor-dialog .button-row{border-top:1px solid var(--line);padding-top:18px;justify-content:flex-end}
+.editor-dialog .event-save-message:not(:empty){color:#9f3b2d;font-weight:700}
+@media(max-width:1040px){.admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-page-head{align-items:flex-start;flex-direction:column}.dashboard-head-actions{justify-content:flex-start}}
+@media(max-width:875px){.event-row{grid-template-columns:92px minmax(0,1fr) 170px}.event-card-actions{grid-column:3;grid-row:2}}
+@media(max-width:650px){body.organizer-view .admin-shell{padding:23px 15px 48px}.admin-login-card{padding:27px 22px}.admin-login-card .admin-login-intro h1{font-size:30px}.admin-page-head h1{font-size:31px}.dashboard-head-actions{width:100%}.dashboard-head-actions .button{flex:1}.dashboard-head-actions #create-event{flex-basis:100%}.admin-stat{padding:16px}.admin-stat strong{font-size:26px}.dashboard-list-toolbar{align-items:stretch;flex-direction:column;gap:14px}.dashboard-filter{align-self:flex-start}.dashboard-filter select{width:auto}.admin-event{padding:18px 15px}.admin-event .admin-actions{gap:6px}.editor-dialog-head{padding:17px 19px}.editor-dialog .event-editor{padding:19px 17px 25px}.editor-dialog .form-grid{grid-template-columns:minmax(0,1fr)}.editor-dialog .editor-topline{align-items:flex-start;flex-direction:column}.event-card-actions{grid-column:1/-1;grid-row:3;display:grid;grid-template-columns:1fr 1fr}.event-row .event-card-actions .button{grid-column:auto;grid-row:auto;white-space:normal}.event-row-private-label{margin:4px 0 0}.event-card-actions .copy-invite-card{min-height:42px}}
+@media(max-width:420px){.dashboard-head-actions .button{font-size:12px;padding:10px}.event-card-actions{grid-template-columns:1fr}.editor-dialog .button-row{flex-direction:column}.editor-dialog .button-row .button{width:100%}}

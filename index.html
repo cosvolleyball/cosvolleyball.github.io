@@ -20,6 +20,7 @@
   <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M2 21v-2a6 6 0 0 1 12 0v2H2ZM17 5a3 3 0 0 1 0 6m1 4a5 5 0 0 1 4 5v1h-5"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 1 0 7 7l1.7-1.7"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
 </svg>
 <header class="site-header" id="top">
@@ -31,7 +32,7 @@
     <nav class="site-nav" aria-label="Main navigation">
       <a href="./#events" id="events-nav">Events</a>
       <a href="./#about" id="about-nav">About</a>
-      <a href="#admin" id="organizer-link" class="nav-organizer">Organizer Login</a>
+      <a href="?dashboard=1" id="organizer-link" class="nav-organizer">Organizer Login</a>
     </nav>
   </div>
 </header>
@@ -50,8 +51,8 @@
     </div>
   </div>
 </section>
+<div id="notice" class="notice" role="status" hidden></div>
 <main>
-  <div id="notice" class="notice" role="status" hidden></div>
   <div id="registration-link-box" class="registration-link-box" hidden>
     <h2>Save your registration link</h2>
     <p>You can use this private link to check your registration status or cancel if your plans change. <strong>Keep it somewhere safe:</strong> automatic emails aren't enabled yet, and anyone with this link could cancel your registration.</p>
@@ -87,7 +88,8 @@
     <p id="signup-summary" class="muted"></p>
     <input type="hidden" id="event-id">
     <label>Full name<input id="player-name" maxlength="100" required autocomplete="name"></label>
-    <label>Email address<input id="player-email" type="email" maxlength="254" required autocomplete="email"></label>
+    <label>Email address<input id="player-email" type="email" maxlength="254" required autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="email-hint"></label>
+    <p id="email-hint" class="email-hint" role="status" aria-live="polite">We’ll check the format and flag common domain spelling mistakes. Email ownership verification isn’t enabled yet.</p>
     <label>Phone (optional)<input id="player-phone" type="tel" maxlength="30" autocomplete="tel"></label>
     <label>How will you pay?
       <select id="payment-method" required><option value="venmo">Venmo</option><option value="cash">Cash at the gym</option><option value="apple_cash">Apple Cash</option></select>
@@ -98,17 +100,28 @@
     <p id="signup-error" class="error" role="alert"></p>
   </form>
 </dialog>
-<section id="admin" class="admin-shell" aria-label="Organizer access">
-  <details id="admin-details"><summary>Organizer dashboard <span class="summary-chevron" aria-hidden="true">⌄</span></summary>
-    <div class="admin-content">
-      <div class="admin-login" id="admin-login">
-        <div class="admin-login-intro"><span class="admin-lock"><svg class="icon"><use href="#i-lock"/></svg></span><h2>Organizer Login</h2><p>Sign in to create sessions, manage registrations, and track payments.</p></div>
-        <form id="login-form" class="login-form"><label>Organizer email<input id="admin-email" type="email" required autocomplete="username" placeholder="you@example.com"></label><label>Password<input id="admin-password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign in to dashboard</button></form>
-        <p id="admin-message" class="small muted" role="status"></p>
-      </div>
-      <div id="admin-panel" hidden>
-        <div class="admin-head"><div><span class="section-kicker">ORGANIZER TOOLS</span><h2>Manage Open Gyms</h2></div><button id="signout" class="button secondary">Sign out</button></div>
-        <form id="event-form" class="event-editor">
+<section id="admin" class="admin-shell" aria-label="Organizer dashboard">
+  <div class="admin-login-view" id="admin-login">
+    <div class="admin-login admin-login-card">
+      <div class="admin-login-intro"><span class="admin-lock"><svg class="icon"><use href="#i-lock"/></svg></span><span class="section-kicker">PRIVATE ORGANIZER ACCESS</span><h1>Organizer Login</h1><p>Sign in to manage events, registrations and payments.</p></div>
+      <form id="login-form" class="login-form"><label>Organizer email<input id="admin-email" type="email" required autocomplete="username" placeholder="you@example.com"></label><label>Password<input id="admin-password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign in to dashboard</button></form>
+      <p id="admin-message" class="small muted" role="status"></p>
+      <a class="back-to-events" href="./#events">← Back to upcoming events</a>
+    </div>
+  </div>
+  <div id="admin-panel" hidden>
+    <div class="admin-head admin-page-head">
+      <div><span class="section-kicker">ORGANIZER WORKSPACE</span><h1>Manage Events</h1><p class="muted">Your events, registrations and payments, all in one place.</p></div>
+      <div class="dashboard-head-actions"><a href="./#events" class="button secondary">View site</a><button id="signout" type="button" class="button secondary">Sign out</button><button id="create-event" type="button" class="button">＋ Create event</button></div>
+    </div>
+    <div id="admin-stats" class="admin-stats" aria-label="Event summary"></div>
+    <div class="dashboard-list-toolbar"><div><span class="section-kicker">EVENT MANAGEMENT</span><h2>Events and registrations</h2></div><label class="dashboard-filter">Show<select id="admin-filter"><option value="all">All events</option><option value="published">Published</option><option value="draft">Drafts</option><option value="cancelled">Cancelled</option></select></label></div>
+    <div id="admin-events"></div>
+  </div>
+</section>
+<dialog id="event-editor-dialog" class="editor-dialog" aria-labelledby="editor-heading">
+  <div class="editor-dialog-head"><div><span class="section-kicker">ORGANIZER WORKSPACE</span><h2 id="editor-modal-label">Event details</h2></div><button type="button" class="editor-dialog-close" id="close-event-editor" aria-label="Close event editor">×</button></div>
+  <form id="event-form" class="event-editor">
           <div class="editor-topline"><h3 id="editor-heading">Create an event</h3><span class="editor-aside">All changes save to your Supabase database</span></div>
           <input type="hidden" id="edit-id">
           <div class="form-grid">
@@ -138,14 +151,10 @@
           </div>
           <p class="small muted">Private events stay off the homepage. Anyone with the direct link can sign up; this is not identity-verified access.</p>
           <label>Event details<textarea id="event-description" rows="3" maxlength="1000" placeholder="Skill level, parking, what to bring…"></textarea></label>
-          <div class="button-row"><button class="button" type="submit">Save event</button><button class="button secondary" type="button" id="reset-event">Clear form</button></div>
+          <div class="button-row"><button class="button" type="submit">Save event</button><button class="button secondary" type="button" id="reset-event">Cancel</button></div>
           <p id="event-save-message" class="small muted" role="status"></p>
         </form>
-        <h3 class="registrations-heading">Registrations and payments</h3><div id="admin-events"></div>
-      </div>
-    </div>
-  </details>
-</section>
+</dialog>
 <footer class="site-footer"><span>© Colorado Springs Pickup Volleyball</span><span>Community play · Cost-sharing only</span></footer>
 <script type="module" src="app.js"></script>
 </body>
