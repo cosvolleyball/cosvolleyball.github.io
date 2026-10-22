@@ -23,6 +23,7 @@
   <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 1 0 7 7l1.7-1.7"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
 </svg>
+<!-- Shared navigation: events, about, and organizer dashboard -->
 <header class="site-header" id="top">
   <div class="nav-wrap">
     <a class="brand" href="./" aria-label="Colorado Springs Pickup Volleyball home">
@@ -53,11 +54,7 @@
 </section>
 <div id="notice" class="notice" role="status" hidden></div>
 <main>
-  <div id="registration-link-box" class="registration-link-box" hidden>
-    <h2>Save your registration link</h2>
-    <p>You can use this private link to check your registration status or cancel if your plans change. <strong>Keep it somewhere safe:</strong> automatic emails aren't enabled yet, and anyone with this link could cancel your registration.</p>
-    <div class="manage-link-actions"><a id="registration-link" class="button secondary" href="#">Manage registration</a><button class="button" type="button" id="copy-registration-link">Copy my link</button></div>
-  </div>
+  <!-- Event details and account-free cancellation views are rendered here. -->
   <section id="invitation-section" class="invitation-section" aria-label="Event details" hidden>
     <div class="invite-topline">
       <a class="invite-back-link" href="./">← All open gyms</a>
@@ -77,10 +74,11 @@
     <div class="about-steps">
       <article class="about-step"><span class="step-icon"><svg class="icon"><use href="#i-calendar"/></svg></span><h3>Find a session</h3><p>Choose an upcoming open gym that works for you.</p></article>
       <article class="about-step"><span class="step-icon"><svg class="icon"><use href="#i-check"/></svg></span><h3>Save your spot</h3><p>Register in seconds. No account required.</p></article>
-      <article class="about-step"><span class="step-icon"><svg class="icon"><use href="#i-people"/></svg></span><h3>Show up & play</h3><p>Contribute by Venmo, cash, or Apple Cash and enjoy the game.</p></article>
+      <article class="about-step"><span class="step-icon"><svg class="icon"><use href="#i-people"/></svg></span><h3>Show up & play</h3><p>Contribute by Venmo or cash and enjoy the game.</p></article>
     </div>
   </section>
 </main>
+<!-- Public registration form; player accounts are not required. -->
 <dialog id="signup-dialog">
   <form id="signup-form" class="dialog-form">
     <button type="button" class="close" id="close-dialog" aria-label="Close">×</button>
@@ -89,17 +87,21 @@
     <input type="hidden" id="event-id">
     <label>Full name<input id="player-name" maxlength="100" required autocomplete="name"></label>
     <label>Email address<input id="player-email" type="email" maxlength="254" required autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="email-hint"></label>
-    <p id="email-hint" class="email-hint" role="status" aria-live="polite">We’ll check the format and flag common domain spelling mistakes. Email ownership verification isn’t enabled yet.</p>
+    <p id="email-hint" class="email-hint" role="status" aria-live="polite">We’ll check the format and flag common domain spelling mistakes. We’ll email your registration status. Please enter an address you can access.</p>
     <label>Phone (optional)<input id="player-phone" type="tel" maxlength="30" autocomplete="tel"></label>
     <label>How will you pay?
-      <select id="payment-method" required><option value="venmo">Venmo</option><option value="cash">Cash at the gym</option><option value="apple_cash">Apple Cash</option></select>
+      <select id="payment-method" required>
+        <option value="venmo">Venmo</option>
+        <option value="cash">Cash at the gym</option>
+      </select>
     </label>
     <p class="signup-roster-notice"><strong>Player roster:</strong> Your name will appear on this event's player roster, visible to anyone who can access its event page. Your email and phone number are only available to organizers.</p>
-    <p class="small muted">Registration reserves your spot when available. Payment is made separately to the organizer; do not enter payment or bank details here.</p>
+    <p class="small muted">Registration reserves your spot when available. Pay by Venmo or cash; ask the organizer about other arrangements. Never enter payment or bank details here.</p>
     <button class="button" type="submit" id="submit-signup">Confirm registration</button>
     <p id="signup-error" class="error" role="alert"></p>
   </form>
 </dialog>
+<!-- Dashboard is a separate ?dashboard=1 view, not part of the homepage. -->
 <section id="admin" class="admin-shell" aria-label="Organizer dashboard">
   <div class="admin-login-view" id="admin-login">
     <div class="admin-login admin-login-card">

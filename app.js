@@ -1,16 +1,28 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createClient
+} from "https://esm.sh/@supabase/supabase-js@2";
 
-// 1. Paste your Supabase project URL and anon/publishable key below.
-// Never put a service_role key in browser code.
+// Public browser configuration.
+// These values are safe to expose to a browser: Supabase Row Level Security
+// and our audited RPC functions enforce access. NEVER paste service_role
+// credentials, database passwords, or Gmail tokens into this file.
 const SUPABASE_URL = "https://mfumtentefcuysibknyl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JGD9JifuMwGF37U2SCxRig_PvgA8psg";
 const configured = SUPABASE_URL.startsWith("https://") && !SUPABASE_URL.includes("PASTE_") && !SUPABASE_ANON_KEY.includes("PASTE_");
 const supabase = configured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
+// ── Shared display helpers and state ───────────────────────────────────────
 const $ = (id) => document.getElementById(id);
-const esc = (s="") => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const money = cents => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(cents/100);
-const dateTime = s => new Date(s).toLocaleString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"});
+const esc = (s="") => String(s).replace(/[&<>"']/g, c => ({
+  "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+}
+[c]));
+const money = cents => new Intl.NumberFormat("en-US",{
+  style:"currency",currency:"USD"
+}).format(cents/100);
+const dateTime = s => new Date(s).toLocaleString("en-US",{
+  weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"
+});
 let eventCache = [];
 let currentUser = null;
 let invitedEvent = null;
@@ -25,7 +37,6 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 const validInviteToken = inviteToken && uuidPattern.test(inviteToken) ? inviteToken : null;
 const validPublicEventId = publicEventId && uuidPattern.test(publicEventId) ? publicEventId : null;
 const validManageToken = manageToken && uuidPattern.test(manageToken) ? manageToken : null;
-const manageUrl = token => `${window.location.origin}${window.location.pathname}?manage=${encodeURIComponent(token)}`;
 const inviteUrl = token => `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(token)}`;
 const publicEventUrl = id => `${window.location.origin}${window.location.pathname}?event=${encodeURIComponent(id)}`;
 // GitHub Pages hosts a single document; ?dashboard=1 is a separate organizer view.
@@ -45,7 +56,6 @@ if (detailRequested) {
   $("about-nav").href = "./#about";
 }
 
-
 if (detailRequested) {
   document.body.classList.add("event-detail-view");
   document.querySelector(".brand")?.setAttribute("href", "./");
@@ -62,48 +72,67 @@ if (inviteToken !== null || manageToken !== null) {
   noindex.content = "noindex,nofollow";
   document.head.appendChild(noindex);
 }
-const dateLabel = value => new Date(value).toLocaleDateString("en-US", {weekday:"long",month:"long",day:"numeric",year:"numeric"});
-const timeLabel = value => new Date(value).toLocaleTimeString("en-US", {hour:"numeric",minute:"2-digit"});
+const dateLabel = value => new Date(value).toLocaleDateString("en-US", {
+  weekday:"long",month:"long",day:"numeric",year:"numeric"
+});
+const timeLabel = value => new Date(value).toLocaleTimeString("en-US", {
+  hour:"numeric",minute:"2-digit"
+});
 const eventTimeRange = event => {
   const first = new Date(event.starts_at), last = new Date(event.ends_at);
   return first.toDateString() === last.toDateString()
-    ? `${timeLabel(event.starts_at)} – ${timeLabel(event.ends_at)}`
-    : `${timeLabel(event.starts_at)} – ${dateLabel(event.ends_at)}, ${timeLabel(event.ends_at)}`;
+  ? `${timeLabel(event.starts_at)} – ${timeLabel(event.ends_at)}`
+  : `${timeLabel(event.starts_at)} – ${dateLabel(event.ends_at)}, ${timeLabel(event.ends_at)}`;
 };
 
+function notice(message, error=false) {
+  const n=$("notice");
+  n.hidden=!message;
+  n.textContent=message;
+  n.classList.toggle("error",error);
+}
 
-function notice(message, error=false) { const n=$("notice"); n.hidden=!message; n.textContent=message; n.classList.toggle("error",error); }
 function unavailable() {
   $("events").innerHTML = `<div class="empty-state"><h3>Almost ready to play</h3><p>Connect your Supabase project to load live events. Follow the setup guide included with this website.</p></div>`;
 }
+
+// ── Upcoming events and private organizer listings ────────────────────────
 async function loadEvents() {
   const loadId=++eventLoadEpoch;
   if (!supabase) return unavailable();
-  const {data,error}=await supabase.rpc("public_open_gym_events");
+  const { data, error } = await  supabase.rpc("public_open_gym_events");
   if (loadId!==eventLoadEpoch) return;
-  if(error){
+  if (error) {
     const message = "Could not load events. Check the Supabase setup and SQL installation.";
     $("events").textContent = message;
-    if (publicEventId !== null) {$("invitation-section").hidden = false;$("invitation-event").textContent=message;}
-    console.error(error);return;
+    if (publicEventId !== null) {
+      $("invitation-section").hidden = false;
+      $("invitation-event").textContent=message;
+    }
+    console.error(error);
+    return;
   }
   // Public RPC remains public-only; the organizer's private events are
   // fetched separately through existing authenticated RLS policies.
   let privateEvents=[];
   if (isOrganizer && !detailRequested) {
-    const {data:privateRows,error:privateError}=await supabase.from("events")
-      .select("id,title,venue,starts_at,ends_at,price_cents,capacity,description,visibility,invite_token")
-      .eq("status","published").eq("visibility","private")
-      .gt("ends_at",new Date().toISOString()).order("starts_at",{ascending:true});
+    const { data:privateRows, error:privateError } = await  supabase.from("events")
+    .select("id,title,venue,starts_at,ends_at,price_cents,capacity,description,visibility,invite_token")
+    .eq("status","published").eq("visibility","private")
+    .gt("ends_at",new Date().toISOString()).order("starts_at",{
+      ascending:true
+    });
     if (privateError) console.error("Could not load organizer-only events:",privateError);
     else if (privateRows?.length) {
       const ids=privateRows.map(e=>e.id);
-      const {data:registrations,error:regError}=await supabase.from("registrations")
-        .select("event_id,registration_status").in("event_id",ids);
+      const { data:registrations, error:regError } = await  supabase.from("registrations")
+      .select("event_id,registration_status").in("event_id",ids);
       if (regError) console.error("Could not load organizer-only event capacities:",regError);
       privateEvents=privateRows.map(e=>{
         const members=(registrations||[]).filter(r=>r.event_id===e.id);
-        return {...e,spots_remaining:Math.max(0,e.capacity-members.filter(r=>r.registration_status==="registered").length),waitlist_count:members.filter(r=>r.registration_status==="waitlisted").length};
+        return {
+          ...e,spots_remaining:Math.max(0,e.capacity-members.filter(r=>r.registration_status==="registered").length),waitlist_count:members.filter(r=>r.registration_status==="waitlisted").length
+        };
       });
     }
   }
@@ -112,21 +141,30 @@ async function loadEvents() {
   eventCache=[...listed];
   if (invitedEvent && !eventCache.some(e=>e.id===invitedEvent.id)) eventCache.push(invitedEvent);
   if (publicEventId !== null) renderPublicEventDetail(data||[]);
-  if (!listed.length) {$("events").innerHTML='<div class="empty-state"><span class="pill">Coming soon</span><h3>No sessions posted yet</h3><p>Check back soon for the next open gym.</p></div>';return;}
+  if (!listed.length) {
+    $("events").innerHTML='<div class="empty-state"><span class="pill">Coming soon</span><h3>No sessions posted yet</h3><p>Check back soon for the next open gym.</p></div>';
+    return;
+  }
   $("events").innerHTML=listed.map(eventCard).join("");
   $("events").querySelectorAll("[data-copy-card-invite]").forEach(button=>button.addEventListener("click",()=>{
     const e=privateEvents.find(e=>e.id===button.dataset.copyCardInvite);
     if (e?.invite_token) void copyLink(inviteUrl(e.invite_token),button);
   }));
 }
+
 async function copyLink(url,button){
   try {
     await navigator.clipboard.writeText(url);
     const previous=button.innerHTML;
     button.textContent="✓ Copied!";
-    setTimeout(()=>{if(button.isConnected) button.innerHTML=previous;},1800);
-  } catch {window.prompt("Copy this invitation link:",url);}
+    setTimeout(()=>{
+      if(button.isConnected) button.innerHTML=previous;
+    },1800);
+  } catch {
+    window.prompt("Copy this invitation link:",url);
+  }
 }
+
 function eventCard(e) {
   const capacity = Math.max(1, Number(e.capacity) || 1);
   const remaining = Math.max(0, Number(e.spots_remaining) || 0);
@@ -134,8 +172,12 @@ function eventCard(e) {
   const percent = Math.round(filled / capacity * 100);
   const full = remaining === 0;
   const start = new Date(e.starts_at);
-  const day = start.toLocaleDateString("en-US", {weekday:"short"}).toUpperCase();
-  const month = start.toLocaleDateString("en-US", {month:"short"}).toUpperCase();
+  const day = start.toLocaleDateString("en-US", {
+    weekday:"short"
+  }).toUpperCase();
+  const month = start.toLocaleDateString("en-US", {
+    month:"short"
+  }).toUpperCase();
   const date = start.getDate();
   const privateEvent=e.visibility === "private";
   const url = privateEvent && e.invite_token ? inviteUrl(e.invite_token) : publicEventUrl(e.id);
@@ -158,6 +200,8 @@ function eventCard(e) {
     ${privateEvent ? `<button class="button secondary copy-invite-card" type="button" data-copy-card-invite="${esc(e.id)}" aria-label="Copy invitation link for ${esc(e.title)}"><svg class="icon"><use href="#i-link"/></svg> Copy link</button>` : ""}</div>
   </article>`;
 }
+
+// ── Full event pages and player rosters ────────────────────────────────────
 function eventDetailPage(e, isPrivate) {
   const remaining = Math.max(0, Number(e.spots_remaining) || 0);
   const capacity = Math.max(1, Number(e.capacity) || 1);
@@ -181,7 +225,13 @@ function eventDetailPage(e, isPrivate) {
       <div class="invite-facts" aria-label="Event information">
         <div class="invite-fact"><span class="invite-fact-icon" aria-hidden="true">▦</span><div><span class="invite-fact-label">DATE</span><strong>${esc(dateLabel(e.starts_at))}</strong><span>${esc(eventTimeRange(e))}</span></div></div>
         <div class="invite-fact"><span class="invite-fact-icon" aria-hidden="true">⌖</span><div><span class="invite-fact-label">LOCATION</span><strong>${esc(e.venue)}</strong><span>Colorado Springs area</span></div></div>
-        <div class="invite-fact"><span class="invite-fact-icon" aria-hidden="true">$</span><div><span class="invite-fact-label">PLAYER CONTRIBUTION</span><strong>${money(e.price_cents)} per player</strong><span>Pay the organizer directly</span></div></div>
+        <div class="invite-fact">
+      <span class="invite-fact-icon" aria-hidden="true">$</span>
+      <div><span class="invite-fact-label">PLAYER CONTRIBUTION</span>
+        <strong>${money(e.price_cents)} per player</strong>
+        <span>Pay the organizer directly</span>
+      </div>
+    </div>
       </div>
       <div class="invite-about">
         <span class="invite-section-label">THE DETAILS</span>
@@ -192,7 +242,12 @@ function eventDetailPage(e, isPrivate) {
         <div class="roster-head"><div><span class="invite-section-label">WHO'S PLAYING</span><h2>Player roster</h2></div><span class="roster-count">Loading…</span></div>
         <p class="roster-loading">Loading registered and waitlisted players…</p>
       </section>
-      <div class="invite-disclosure"><span aria-hidden="true">◈</span><p>${isPrivate ? "<strong>Shared by invitation.</strong> This event doesn't appear in public listings. Anyone who has this link is welcome to register, and no account is needed." : "<strong>Everyone is welcome to register.</strong> This event is publicly listed, and you can share this page with friends. No account is needed."}</p></div>
+      <div class="invite-disclosure">
+        <span aria-hidden="true">◈</span>
+        <p>${isPrivate
+          ? "<strong>Shared by invitation.</strong> This event doesn't appear in public listings. Anyone with the link can register without an account."
+          : "<strong>Everyone is welcome to register.</strong> This event is publicly listed, and you can share this page with friends. No account is needed."}</p>
+      </div>
     </div>
     <aside class="invite-aside" aria-label="Registration information">
       <div class="invite-booking-card">
@@ -202,7 +257,7 @@ function eventDetailPage(e, isPrivate) {
         <div class="invite-progress" role="progressbar" aria-label="Registered spots" aria-valuemin="0" aria-valuemax="${capacity}" aria-valuenow="${occupied}"><div style="width:${percent}%"></div></div>
         ${full?`<p class="invite-waitlist-note">${Number(e.waitlist_count)||0} on the waitlist. You'll be added to it when you register.</p>`:`<p class="invite-reassurance">Your spot is reserved when you register.</p>`}
         <button class="button invite-register-button" data-register="${esc(e.id)}">${buttonText} <span aria-hidden="true">→</span></button>
-        <p class="invite-booking-footnote">No account required · Pay by Venmo, cash, or Apple Cash</p>
+        <p class="invite-booking-footnote">No account required · Pay by Venmo or cash</p>
       </div>
       <div class="invite-aside-note"><strong>What happens next?</strong><p>Enter your contact details, choose how you'll pay, and you're set. Payment happens separately with the organizer.</p></div>
     </aside>
@@ -210,10 +265,11 @@ function eventDetailPage(e, isPrivate) {
 }
 // One database function returns ONLY player_name and registration_status.
 // Private events require their invitation token even when the event ID is known.
+
 async function loadEventRoster(event, isPrivate) {
   const root = $("event-roster");
   if (!root || !supabase) return;
-  const {data, error} = await supabase.rpc("event_player_roster", {
+  const { data, error } = await  supabase.rpc("event_player_roster", {
     p_event_id: event.id,
     p_invite_token: isPrivate ? validInviteToken : null
   });
@@ -234,11 +290,11 @@ async function loadEventRoster(event, isPrivate) {
       ${waitlist ? `<span class="roster-status">Waitlisted #${i + 1}</span>` : ""}
     </li>`).join("");
   const registeredHtml = registered.length
-    ? `<ul class="roster-list">${names(registered, false)}</ul>`
-    : `<p class="roster-empty">No registered players yet. Be the first!</p>`;
+  ? `<ul class="roster-list">${names(registered, false)}</ul>`
+  : `<p class="roster-empty">No registered players yet. Be the first!</p>`;
   const waitlistHtml = waitlisted.length
-    ? `<ul class="roster-list">${names(waitlisted, true)}</ul>`
-    : `<p class="roster-empty">No one on the waitlist.</p>`;
+  ? `<ul class="roster-list">${names(waitlisted, true)}</ul>`
+  : `<p class="roster-empty">No one on the waitlist.</p>`;
   const content = root.querySelector(".roster-loading");
   content.outerHTML = `<div class="roster-groups">
       <div class="roster-group"><h3>Registered players <span>${registered.length}</span></h3>${registeredHtml}</div>
@@ -266,19 +322,27 @@ function renderPublicEventDetail(events) {
   document.title = `${event.title} | Colorado Springs Pickup Volleyball`;
   wireRegistrationButtons($("invitation-event"));
 }
+
 function wireRegistrationButtons(parent) {
   parent.querySelectorAll("[data-register]").forEach(b=>b.addEventListener("click",()=>openSignup(b.dataset.register)));
 }
+
 async function loadInvitedEvent() {
   invitedEvent=null;
   const section=$("invitation-section");
-  if (!inviteToken) { section.hidden=true; invitedEvent=null; return; }
+  if (!inviteToken) {
+    section.hidden=true;
+    invitedEvent=null;
+    return;
+  }
   section.hidden=false;
   if (!validInviteToken) {
     $("invitation-event").innerHTML='<p>This invitation link is invalid.</p>';
     return;
   }
-  const {data,error}=await supabase.rpc("private_open_gym_event", {p_invite_token: validInviteToken});
+  const { data, error } = await  supabase.rpc("private_open_gym_event", {
+    p_invite_token: validInviteToken
+  });
   if (error) {
     console.error(error);
     $("invitation-event").textContent="Unable to load this invitation. Please try again later.";
@@ -295,41 +359,86 @@ async function loadInvitedEvent() {
   wireRegistrationButtons($("invitation-event"));
   await loadEvents();
 }
+
+// ── Player registration and email confirmation notice ────────────────────────
 function openSignup(id) {
-  const e=eventCache.find(x=>x.id===id); if(!e)return;
-  $("event-id").value=id;$("signup-title").textContent=e.title;
+  const e=eventCache.find(x=>x.id===id);
+  if(!e)return;
+  $("event-id").value=id;
+  $("signup-title").textContent=e.title;
   $("signup-summary").textContent=`${dateTime(e.starts_at)} · ${e.venue} · ${money(e.price_cents)}${e.spots_remaining<=0?" · This registration will join the waitlist.":""}`;
-  $("signup-error").textContent="";$("signup-dialog").showModal();
+  $("signup-error").textContent="";
+  $("signup-dialog").showModal();
 }
 $("close-dialog").addEventListener("click",()=>$("signup-dialog").close());
 // Client-side email checks: syntax and likely domain typos. No claim is made
 // that the mailbox exists; ownership verification requires sending email.
-const knownEmailTypos={"gmial.com":"gmail.com","gmai.com":"gmail.com","gmail.con":"gmail.com","gmail.co":"gmail.com","gnail.com":"gmail.com","yaho.com":"yahoo.com","yahoo.con":"yahoo.com","outlok.com":"outlook.com","outlook.con":"outlook.com","hotmial.com":"hotmail.com","hotmail.con":"hotmail.com","icloud.con":"icloud.com"};
+const knownEmailTypos={
+  "gmial.com": "gmail.com",
+  "gmai.com": "gmail.com",
+  "gmail.con": "gmail.com",
+  "gmail.co": "gmail.com",
+  "gnail.com": "gmail.com",
+  "yaho.com": "yahoo.com",
+  "yahoo.con": "yahoo.com",
+  "outlok.com": "outlook.com",
+  "outlook.con": "outlook.com",
+  "hotmial.com": "hotmail.com",
+  "hotmail.con": "hotmail.com",
+  "icloud.con": "icloud.com"
+};
+
 function emailProblem(value) {
   const email=value.trim();
   const parts=email.split("@");
   if (email.length>254 || parts.length!==2 || !parts[0] || !parts[1] || /\s/.test(email)) return "Enter a valid email address.";
   const [local,domain]=parts;
   if (local.length>64 || local.startsWith(".") || local.endsWith(".") || local.includes("..") || !/^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~.-]+$/.test(local)) return "Check the email address before registering.";
-  if (domain.length>253 || !domain.includes(".") || domain.endsWith(".") || domain.includes("..") || !domain.split(".").every(label=>label.length>=1 && label.length<=63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label)) || !/^[a-z]{2,63}$/i.test(domain.split(".").at(-1))) return "Enter an email with a valid-looking domain (example: gmail.com).";
+  const labels = domain.split(".");
+  const hasValidLabels = labels.every(label =>
+    label.length >= 1 &&
+    label.length <= 63 &&
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label)
+  );
+  const hasValidTopLevelDomain = /^[a-z]{2,63}$/i.test(labels.at(-1));
+
+  if (
+    domain.length > 253 ||
+    !domain.includes(".") ||
+    domain.endsWith(".") ||
+    domain.includes("..") ||
+    !hasValidLabels ||
+    !hasValidTopLevelDomain
+  ) {
+    return "Enter an email with a valid-looking domain (example: gmail.com).";
+  }
   return null;
 }
+
 function updateEmailHint() {
   const input=$("player-email"), hint=$("email-hint"), value=input.value.trim();
-  if (!value) {hint.textContent="We’ll check the format and flag common domain spelling mistakes. Email ownership verification isn’t enabled yet.";hint.classList.remove("email-hint-warning");return;}
+  if (!value) {
+    hint.textContent="We’ll email your registration status. Please enter an address you can access.";
+    hint.classList.remove("email-hint-warning");
+    return;
+  }
   const problem=emailProblem(value);
   const suggestion=knownEmailTypos[value.split("@").at(-1).toLowerCase()];
-  hint.textContent=problem || (suggestion ? `Possible typo: did you mean @${suggestion}? Please review your address.` : "Email format looks good. The actual mailbox is not verified yet.");
+  hint.textContent=problem || (suggestion ? `Possible typo: did you mean @${suggestion}? Please review your address.` : "Email format looks good. Check your inbox and Spam/Junk after registering.");
   hint.classList.toggle("email-hint-warning",!!problem || !!suggestion);
 }
 $("player-email").addEventListener("input",updateEmailHint);
 $("player-email").addEventListener("blur",updateEmailHint);
 $("signup-form").addEventListener("submit",async ev=>{
-  ev.preventDefault(); if(!supabase){$("signup-error").textContent="The website isn't connected to Supabase yet.";return;}
+  ev.preventDefault(); if(!supabase){
+    $("signup-error").textContent="The website isn't connected to Supabase yet.";return;
+  }
   const emailError=emailProblem($("player-email").value);
-  if (emailError){$("signup-error").textContent=emailError;$("player-email").focus();return;}
+  if (emailError){
+    $("signup-error").textContent=emailError;$("player-email").focus();return;
+  }
   const btn=$("submit-signup");btn.disabled=true;btn.textContent="Registering…";$("signup-error").textContent="";
-  const {data,error}=await supabase.rpc("register_for_open_gym",{
+  const { data, error } = await  supabase.rpc("register_for_open_gym",{
     p_event_id:$("event-id").value,p_name:$("player-name").value.trim(),
     p_email:$("player-email").value.trim(),p_phone:$("player-phone").value.trim()||null,
     p_payment_method:$("payment-method").value,
@@ -337,24 +446,30 @@ $("signup-form").addEventListener("submit",async ev=>{
     p_invite_token: invitedEvent?.id === $("event-id").value ? validInviteToken : null
   });
   btn.disabled=false;btn.textContent="Confirm registration";
-  if(error){$("signup-error").textContent=error.message.includes("duplicate")?"You already have a registration for this event.":error.message;return;}
-  $("signup-dialog").close();
-  notice(data?.status==="waitlisted"?"You're on the waitlist! Your name will appear as waitlisted.":"You're registered! Please pay the organizer separately.");
-  if (data?.manage_token && uuidPattern.test(data.manage_token)) {
-    // Never include the management token in the public roster or event URL.
-    const url = manageUrl(data.manage_token);
-    const box = $("registration-link-box");
-    $("registration-link").href = url;
-    $("copy-registration-link").dataset.copyLink = url;
-    box.hidden = false;
-    box.scrollIntoView({behavior:"smooth",block:"nearest"});
+  if (error) {
+    $("signup-error").textContent=error.message.includes("duplicate")?"You already have a registration for this event.":error.message;return;
   }
+  $("signup-dialog").close();
+  // Email delivery happens asynchronously. Do not claim a message was
+  // delivered immediately, and never display the bearer management token.
+  const emailGuidance =
+  "A confirmation email should arrive shortly. Check Spam/Junk if you " +
+  "don't see it. For help, email cospickupvolleyball@gmail.com.";
+  const registrationMessage = data?.status === "waitlisted"
+  ? "You're on the waitlist (not registered yet). "
+  : "You're registered! Your spot is reserved. ";
+  notice(registrationMessage + emailGuidance);
+  $("notice").scrollIntoView({ behavior: "smooth", block: "start" });
   $("signup-form").reset();updateEmailHint();
   if (validInviteToken) await loadInvitedEvent();
   else await loadEvents();
 });
-// Self-service management uses its own bearer token, not event IDs, emails,
-// or organizer accounts. The database returns only name/event/status.
+// The ?manage= route MUST remain available: registration emails include
+// each player's unguessable management token. It is deliberately no longer
+// displayed on the registration success banner or the organizer dashboard.
+// The database RPC validates the bearer token; no player account is required. The database returns only name/event/status.
+
+// ── Private self-service cancellation page (emailed links only) ────────────
 async function loadManageRegistration() {
   if (manageToken === null || !supabase) return;
   const root = $("invitation-event");
@@ -363,7 +478,9 @@ async function loadManageRegistration() {
     root.innerHTML = `<div class="manage-card"><h1>Invalid registration link</h1><p>Please check the link you received.</p></div>`;
     return;
   }
-  const {data,error} = await supabase.rpc("my_open_gym_registration", {p_manage_token:validManageToken});
+  const { data, error } = await  supabase.rpc("my_open_gym_registration", {
+    p_manage_token:validManageToken
+  });
   if (error || !data?.length) {
     if (error) console.error(error);
     root.innerHTML = `<div class="manage-card"><h1>Registration not found</h1><p>This link may be invalid, or the event may have been deleted. Ask the organizer for assistance.</p></div>`;
@@ -389,37 +506,44 @@ async function loadManageRegistration() {
   $("cancel-my-registration")?.addEventListener("click", async () => {
     if (!window.confirm("Are you sure you want to cancel your registration? If you have a reserved spot, the next person on the waitlist may be promoted automatically. This cannot be undone.")) return;
     const button = $("cancel-my-registration"); button.disabled = true;
-    const {error:cancelError} = await supabase.rpc("cancel_my_open_gym_registration", {p_manage_token:validManageToken});
-    if (cancelError) { alert(cancelError.message); button.disabled = false; return; }
+    const { error:cancelError } = await  supabase.rpc("cancel_my_open_gym_registration", {
+      p_manage_token:validManageToken
+    });
+    if (cancelError) {
+      alert(cancelError.message); button.disabled = false; return;
+    }
     await loadManageRegistration();
     notice("Your registration has been cancelled.");
   });
 }
-$("copy-registration-link").addEventListener("click", async ev => {
-  const url = ev.currentTarget.dataset.copyLink;
-  if (!url) return;
-  try {
-    await navigator.clipboard.writeText(url);
-    ev.currentTarget.textContent = "Link copied!";
-  } catch {
-    window.prompt("Copy your registration management link:",url);
-  }
-});
 $("login-form").addEventListener("submit",async ev=>{
-  ev.preventDefault();if(!supabase){$("admin-message").textContent="Connect Supabase first using app.js.";return;}
-  const {error}=await supabase.auth.signInWithPassword({email:$("admin-email").value,password:$("admin-password").value});
+  ev.preventDefault();if(!supabase){
+    $("admin-message").textContent="Connect Supabase first using app.js.";return;
+  }
+  const { error } = await  supabase.auth.signInWithPassword({
+    email:$("admin-email").value,password:$("admin-password").value
+  });
   $("admin-message").textContent=error?error.message:"";if(!error) await refreshAdmin();
 });
-$("signout").addEventListener("click",async()=>{await supabase.auth.signOut();await refreshAdmin();});
+$("signout").addEventListener("click",async()=>{
+  await supabase.auth.signOut();await refreshAdmin();
+});
 supabase?.auth.onAuthStateChange(()=>setTimeout(refreshAdmin,0));
+
+// ── Organizer authorization and dashboard ─────────────────────────────────
 async function refreshAdmin(){
   const refreshId=++adminRefreshEpoch;
   if (!supabase) return;
-  const {data:{session}}=await supabase.auth.getSession();
+  const {
+    data:{
+      session
+    }
+  }
+  =await supabase.auth.getSession();
   const user=session?.user||null;
   let organizerAccess=false;
   if (user) {
-    const {data:organizer,error}=await supabase.from("organizers").select("user_id").eq("user_id",user.id).maybeSingle();
+    const { data:organizer, error } = await  supabase.from("organizers").select("user_id").eq("user_id",user.id).maybeSingle();
     if (error) console.error("Unable to check organizer access:",error);
     organizerAccess=!!organizer;
   }
@@ -429,7 +553,10 @@ async function refreshAdmin(){
   isOrganizer=organizerAccess;
   $("admin-login").hidden=isOrganizer;
   $("admin-panel").hidden=!isOrganizer;
-  if (!isOrganizer){$("admin-events").replaceChildren();$("admin-stats").replaceChildren();}
+  if (!isOrganizer){
+    $("admin-events").replaceChildren();
+    $("admin-stats").replaceChildren();
+  }
   organizerLink.textContent = isOrganizer ? "Organizer Dashboard" : "Organizer Login";
   if (user && !isOrganizer) $("admin-message").textContent="This account does not have organizer access.";
   if (isOrganizer && dashboardRequested) await loadAdminEvents();
@@ -439,12 +566,15 @@ async function refreshAdmin(){
 }
 // The organizer selects a date (initially blank), hour (6 PM by default),
 // quarter-hour minutes, and duration. The end is computed automatically.
+
+// ── Event editor: date, time, and duration ────────────────────────────────
 function selectedDurationMinutes() {
   const value = $("event-duration").value === "custom"
-    ? Number($("event-duration-custom").value)
-    : Number($("event-duration").value);
+  ? Number($("event-duration-custom").value)
+  : Number($("event-duration").value);
   return Number.isInteger(value) && value >= 1 && value <= 10080 ? value : null;
 }
+
 function calculatedEventTimes() {
   const date = $("event-date").value;
   if (!date) return null;
@@ -452,23 +582,28 @@ function calculatedEventTimes() {
   const quarter = Number($("event-minute").value);
   const minutes = selectedDurationMinutes();
   if (!Number.isInteger(hour) || hour < 0 || hour > 23 ||
-      ![0,15,30,45].includes(quarter) || minutes === null) return null;
+  ![0,15,30,45].includes(quarter) || minutes === null) return null;
   // A local wall-clock start; uses the browser's timezone just as the old editor did.
   const start = new Date(`${date}T${String(hour).padStart(2,"0")}:${String(quarter).padStart(2,"0")}:00`);
   if (Number.isNaN(start.getTime())) return null;
   // Prevent a nonexistent local time (e.g., in the spring DST transition).
   if (start.getHours() !== hour || start.getMinutes() !== quarter ||
-      `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,"0")}-${String(start.getDate()).padStart(2,"0")}` !== date) return null;
-  return {start, end: new Date(start.getTime() + minutes * 60_000)};
+  `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,"0")}-${String(start.getDate()).padStart(2,"0")}` !== date) return null;
+  return {
+    start, end: new Date(start.getTime() + minutes * 60_000)
+  };
 }
+
 function updateEventEndPreview() {
   const custom = $("event-duration").value === "custom";
   $("custom-duration-wrap").hidden = !custom;
   $("event-duration-custom").required = custom;
   const times = calculatedEventTimes();
   $("event-end-preview").textContent = times
-    ? times.end.toLocaleString("en-US", {weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"})
-    : $("event-date").value ? "Choose a valid start time and duration" : "Choose an event date";
+  ? times.end.toLocaleString("en-US", {
+    weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"
+  })
+  : $("event-date").value ? "Choose a valid start time and duration" : "Choose an event date";
 }
 $("event-date").addEventListener("input",updateEventEndPreview);
 $("event-date").addEventListener("change",updateEventEndPreview);
@@ -476,6 +611,7 @@ $("event-hour").addEventListener("change",updateEventEndPreview);
 $("event-minute").addEventListener("change",updateEventEndPreview);
 $("event-duration").addEventListener("change",updateEventEndPreview);
 $("event-duration-custom").addEventListener("input",updateEventEndPreview);
+
 function openEventEditor(event=null){
   if (!isOrganizer) return;
   if (event) editEvent(event);
@@ -489,8 +625,22 @@ $("event-editor-dialog").addEventListener("click",event=>{
   // Native modal backdrop dismissal; clicks inside the content do nothing.
   if (event.target === $("event-editor-dialog")) $("event-editor-dialog").close();
 });
+
 function clearEditor(){
-  $("event-form").reset();$("event-date").value="";$("event-hour").value="18";$("event-minute").value="00";$("edit-id").value="";$("event-venue").value="Hillside Community Center";$("event-price").value="5";$("event-capacity").value="24";$("event-status").value="published";$("event-visibility").value="public";$("event-duration").value="180";$("event-duration-custom").value="180";$("editor-heading").textContent="Create an event";$("event-save-message").textContent="";
+  $("event-form").reset();
+  $("event-date").value="";
+  $("event-hour").value="18";
+  $("event-minute").value="00";
+  $("edit-id").value="";
+  $("event-venue").value="Hillside Community Center";
+  $("event-price").value="5";
+  $("event-capacity").value="24";
+  $("event-status").value="published";
+  $("event-visibility").value="public";
+  $("event-duration").value="180";
+  $("event-duration-custom").value="180";
+  $("editor-heading").textContent="Create an event";
+  $("event-save-message").textContent="";
   updateEventEndPreview();
 }
 $("reset-event").addEventListener("click",()=>$("event-editor-dialog").close());
@@ -498,9 +648,22 @@ $("event-form").addEventListener("submit",async ev=>{
   ev.preventDefault();if(!supabase||!isOrganizer)return;
   const id=$("edit-id").value;
   const times = calculatedEventTimes();
-  if(!times){$("event-save-message").textContent="Choose an event date, start time, and valid duration.";return;}
-  const {start,end}=times;
-  const payload={title:$("event-title").value.trim(),venue:$("event-venue").value.trim(),starts_at:start.toISOString(),ends_at:end.toISOString(),price_cents:Math.round(Number($("event-price").value)*100),capacity:Number($("event-capacity").value),payment_instructions:$("payment-instructions").value.trim(),status:$("event-status").value,visibility:$("event-visibility").value,description:$("event-description").value.trim()};
+  if(!times){
+    $("event-save-message").textContent="Choose an event date, start time, and valid duration.";return;
+  }
+  const { start, end } = times;
+  const payload={
+    title: $("event-title").value.trim(),
+    venue: $("event-venue").value.trim(),
+    starts_at: start.toISOString(),
+    ends_at: end.toISOString(),
+    price_cents: Math.round(Number($("event-price").value) * 100),
+    capacity: Number($("event-capacity").value),
+    payment_instructions: $("payment-instructions").value.trim(),
+    status: $("event-status").value,
+    visibility: $("event-visibility").value,
+    description: $("event-description").value.trim()
+  };
   const result=id?await supabase.from("events").update(payload).eq("id",id).select().single():await supabase.from("events").insert(payload).select().single();
   $("event-save-message").textContent=result.error?result.error.message:"Event saved.";
   if(!result.error){
@@ -510,20 +673,73 @@ $("event-form").addEventListener("submit",async ev=>{
     await loadAdminEvents();
   }
 });
-$("admin-filter").addEventListener("change",()=>{if(isOrganizer) void loadAdminEvents();});
+$("admin-filter").addEventListener("change",()=>{
+  if(isOrganizer) void loadAdminEvents();
+});
+
+// ── Organizer event list and registration management ──────────────────────
+// Contact details are visible only after organizer authentication. The private
+// management token is intentionally not retrieved or displayed here.
+function renderRegistrationRow(registration) {
+  const r = registration;
+  const paymentOptions = ["unpaid", "paid", "refunded"].map(status => {
+    const selected = r.payment_status === status ? "selected" : "";
+    const label = status.charAt(0).toUpperCase() + status.slice(1);
+    return `<option value="${status}" ${selected}>${label}</option>`;
+  }).join("");
+
+  const action = r.registration_status === "cancelled"
+    ? `<span class="muted small">Cancelled</span>`
+    : `<button class="button secondary" data-cancel="${esc(r.id)}">Cancel</button>`;
+
+  return `
+    <tr>
+      <td>${esc(r.player_name)}<br><span class="muted small">${esc(r.player_email)}</span></td>
+      <td>${esc(r.registration_status)}</td>
+      <td>${esc(r.payment_method.replace("_", " "))}</td>
+      <td><select data-payment="${esc(r.id)}">${paymentOptions}</select></td>
+      <td><div class="admin-reg-actions">${action}</div></td>
+    </tr>
+  `;
+}
+
 async function loadAdminEvents(){
-  const {data:events,error}=await supabase.from("events").select("*").order("starts_at",{ascending:false});
-  if(error){$("admin-events").textContent=error.message;return;}
+  // Chronological order: the next upcoming event should appear first.
+  // Keep this ordering for all dashboard filters (including private events).
+  const { data:events, error } = await  supabase.from("events").select("*").order("starts_at",{
+    ascending:true
+  });
+  if (error) {
+    $("admin-events").textContent=error.message;
+    return;
+  }
   const all=events||[];
   const countStatus=status=>all.filter(e=>e.status===status).length;
-  $("admin-stats").innerHTML=`<div class="admin-stat"><span>Published events</span><strong>${countStatus("published")}</strong></div><div class="admin-stat"><span>Private events</span><strong>${all.filter(e=>e.visibility==="private").length}</strong></div><div class="admin-stat"><span>Drafts</span><strong>${countStatus("draft")}</strong></div><div class="admin-stat"><span>Cancelled</span><strong>${countStatus("cancelled")}</strong></div>`;
+  $("admin-stats").innerHTML = `
+    <div class="admin-stat">
+      <span>Published events</span><strong>${countStatus("published")}</strong>
+    </div>
+    <div class="admin-stat">
+      <span>Private events</span>
+      <strong>${all.filter(e => e.visibility === "private").length}</strong>
+    </div>
+    <div class="admin-stat">
+      <span>Drafts</span><strong>${countStatus("draft")}</strong>
+    </div>
+    <div class="admin-stat">
+      <span>Cancelled</span><strong>${countStatus("cancelled")}</strong>
+    </div>
+  `;
   const filter=$("admin-filter").value;
   const shown=filter==="all"?all:all.filter(e=>e.status===filter);
-  if(!shown.length){$("admin-events").innerHTML=`<div class="dashboard-empty">${all.length?"No events match this filter.":"No events yet. Use Create event to add your first session."}</div>`;return;}
+  if(!shown.length){
+    $("admin-events").innerHTML=`<div class="dashboard-empty">${all.length?"No events match this filter.":"No events yet. Use Create event to add your first session."}</div>`;
+    return;
+  }
   const parts=await Promise.all(shown.map(async e=>{
-    const {data:regs,error:rerr}=await supabase.from("registrations").select("id,manage_token,player_name,player_email,player_phone,payment_method,payment_status,registration_status,created_at").eq("event_id",e.id).order("created_at");
+    const { data:regs, error:rerr } = await  supabase.from("registrations").select("id,player_name,player_email,player_phone,payment_method,payment_status,registration_status,created_at").eq("event_id",e.id).order("created_at");
     if(rerr)return `<article class="admin-event"><h4>${esc(e.title)}</h4><p>${esc(rerr.message)}</p></article>`;
-    const rows=(regs||[]).map(r=>`<tr><td>${esc(r.player_name)}<br><span class="muted small">${esc(r.player_email)}</span></td><td>${esc(r.registration_status)}</td><td>${esc(r.payment_method.replace("_"," "))}</td><td><select data-payment="${r.id}"><option value="unpaid" ${r.payment_status==="unpaid"?"selected":""}>Unpaid</option><option value="paid" ${r.payment_status==="paid"?"selected":""}>Paid</option><option value="refunded" ${r.payment_status==="refunded"?"selected":""}>Refunded</option></select></td><td><div class="admin-reg-actions"><button class="button secondary" data-copy-manage="${esc(r.manage_token||'')}">Copy manage link</button>${r.registration_status==='cancelled'?'<span class="muted small">Cancelled</span>':`<button class="button secondary" data-cancel="${r.id}">Cancel</button>`}</div></td></tr>`).join("");
+    const rows = (regs || []).map(renderRegistrationRow).join("");
     return `<article class="admin-event">
       <span class="pill">${esc(e.status)}</span>
       <span class="pill ${e.visibility==="private"?"private-pill":""}">${e.visibility==="private"?"Private · link only":"Public"}</span>
@@ -534,9 +750,9 @@ async function loadAdminEvents(){
         <button class="button secondary" data-toggle="${e.id}" data-status="${e.status}">${e.status==="published"?"Unpublish":e.status==="cancelled"?"Reopen as draft":"Publish"}</button>
         ${e.status!=="cancelled"?`<button class="button button-warn" data-cancel-event="${e.id}">Cancel event</button>`:"<span class='cancelled-hint'>Cancelled · registrations retained</span>"}
         <button class="button button-danger-outline" data-delete-event="${e.id}">Delete permanently</button>
-        ${e.visibility==="private"?`<button class="button secondary" data-copy-invite="${e.id}">Copy invitation link</button>`:e.status==="published"?`<button class="button secondary" data-copy-public="${e.id}">Copy event link</button>`:""}
+        ${e.status==="published" ? `<a class="button secondary" href="${esc(e.visibility === "private" ? inviteUrl(e.invite_token) : publicEventUrl(e.id))}" target="_blank" rel="noopener noreferrer" aria-label="View ${esc(e.title)} event in a new tab">View event ↗</a>` : ""}
       </div>
-      ${e.visibility==="private"&&e.status!=="published"?'<p class="muted small">The invitation link will work once the event is published.</p>':''}
+      ${e.visibility==="private"&&e.status!=="published"?'<p class="muted small">The event link will work once the event is published.</p>':''}
       ${rows?`<table><thead><tr><th>Player</th><th>Registration</th><th>Method</th><th>Payment</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`:"<p class='muted small'>No registrations yet.</p>"}
     </article>`;
   }));
@@ -545,16 +761,27 @@ async function loadAdminEvents(){
   document.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",async()=>{
     const status=b.dataset.status==="published"?"draft":b.dataset.status==="cancelled"?"draft":"published";
     b.disabled=true;
-    const {error}=await supabase.from("events").update({status}).eq("id",b.dataset.toggle);
+    const { error } = await  supabase.from("events").update({
+      status
+    }).eq("id",b.dataset.toggle);
     if(error)alert(error.message);
     if (!dashboardRequested) await loadEvents();if(validInviteToken)await loadInvitedEvent();await loadAdminEvents();
   }));
   document.querySelectorAll("[data-cancel-event]").forEach(b=>b.addEventListener("click",async()=>{
     const event=events.find(e=>e.id===b.dataset.cancelEvent);
     if(!event)return;
-    if(!window.confirm(`Cancel “${event.title}”?\n\nThe event will be removed from public/invitation pages, but every registration and payment record will remain in your dashboard. No emails are sent automatically yet.`))return;
+    const message = [
+      `Cancel “${event.title}”?`,
+      "The event will no longer be available on public or invitation pages.",
+      "Existing registrations and payment records will remain in your dashboard.",
+      "Please contact registered players yourself; full-event cancellation emails aren't implemented."
+    ].join("\n\n");
+
+    if (!window.confirm(message)) return;
     b.disabled=true;
-    const {error}=await supabase.from("events").update({status:"cancelled"}).eq("id",event.id);
+    const { error } = await  supabase.from("events").update({
+      status:"cancelled"
+    }).eq("id",event.id);
     if(error)alert(error.message);
     else notice(`Event cancelled: ${event.title}. Registration and payment records were retained.`);
     if (!dashboardRequested) await loadEvents();if(validInviteToken)await loadInvitedEvent();await loadAdminEvents();
@@ -562,59 +789,47 @@ async function loadAdminEvents(){
   document.querySelectorAll("[data-delete-event]").forEach(b=>b.addEventListener("click",async()=>{
     const event=events.find(e=>e.id===b.dataset.deleteEvent);
     if(!event)return;
-    const count=(await supabase.from("registrations").select("id",{count:"exact",head:true}).eq("event_id",event.id)).count;
-    const warning=`Are you absolutely sure you want to permanently delete this event?\n\n${event.title}\n${dateTime(event.starts_at)}\n\nThis will also permanently delete ${count ?? "all associated"} registration records and their payment history. This action cannot be undone.`;
+    const count=(await supabase.from("registrations").select("id",{
+      count:"exact",head:true
+    }).eq("event_id",event.id)).count;
+    const warning = [
+      "Are you absolutely sure you want to permanently delete this event?",
+      `${event.title}\n${dateTime(event.starts_at)}`,
+      `This will permanently delete ${count ?? "all associated"} registration records ` +
+        "and their payment history. This action cannot be undone."
+    ].join("\n\n");
     if(!window.confirm(warning))return;
     b.disabled=true;
-    const {error}=await supabase.rpc("organizer_delete_open_gym_event",{p_event_id:event.id});
-    if(error){alert(`Could not delete event: ${error.message}\n\nIf the function was not found, run phase2_batch1_upgrade.sql in Supabase first.`);b.disabled=false;return;}
+    const { error } = await  supabase.rpc("organizer_delete_open_gym_event",{
+      p_event_id:event.id
+    });
+    if (error) {
+      alert(`Could not delete event: ${error.message}\n\nIf the function was not found, run phase2_batch1_upgrade.sql in Supabase first.`);b.disabled=false;return;
+    }
     if($("edit-id").value===event.id) clearEditor();
     notice(`Permanently deleted: ${event.title}. Associated registrations were removed.`);
     if (!dashboardRequested) await loadEvents();if(validInviteToken)await loadInvitedEvent();await loadAdminEvents();
   }));
-  document.querySelectorAll("[data-copy-invite]").forEach(b=>b.addEventListener("click",async()=>{
-    const e=events.find(event=>event.id===b.dataset.copyInvite);
-    if (!e?.invite_token) {alert("Invitation link unavailable. Check the database upgrade.");return;}
-    const url=inviteUrl(e.invite_token);
-    try {
-      await navigator.clipboard.writeText(url);
-      const old=b.textContent;b.textContent="Copied!";
-      setTimeout(()=>b.textContent=old,1800);
-    } catch {
-      // The fallback lets organizers copy links in browsers without clipboard permission.
-      window.prompt("Copy your private event link:",url);
-    }
+  document.querySelectorAll("[data-payment]").forEach(s=>s.addEventListener("change",async()=>{
+    const { error } = await  supabase.from("registrations").update({
+      payment_status:s.value
+    }).eq("id",s.dataset.payment);if(error)alert(error.message);
   }));
-  document.querySelectorAll("[data-copy-public]").forEach(b=>b.addEventListener("click",async()=>{
-    const url=publicEventUrl(b.dataset.copyPublic);
-    try {
-      await navigator.clipboard.writeText(url);
-      const old=b.textContent;b.textContent="Copied!";
-      setTimeout(()=>b.textContent=old,1800);
-    } catch {
-      window.prompt("Copy your public event link:",url);
-    }
-  }));
-  document.querySelectorAll("[data-copy-manage]").forEach(b=>b.addEventListener("click",async()=>{
-    if (!uuidPattern.test(b.dataset.copyManage || "")) {alert("This player does not have a management link yet. Check the Batch 3 SQL upgrade.");return;}
-    const url = manageUrl(b.dataset.copyManage);
-    try {
-      await navigator.clipboard.writeText(url);
-      const label = b.textContent; b.textContent = "Copied!";
-      window.setTimeout(()=>b.textContent=label,2000);
-    } catch {window.prompt("Copy the private management link:",url);}
-  }));
-  document.querySelectorAll("[data-payment]").forEach(s=>s.addEventListener("change",async()=>{const {error}=await supabase.from("registrations").update({payment_status:s.value}).eq("id",s.dataset.payment);if(error)alert(error.message);}));
   document.querySelectorAll("[data-cancel]").forEach(b=>b.addEventListener("click",async()=>{
     if (!confirm("Cancel this registration? If the player holds a confirmed spot, the next waitlisted player will be promoted automatically.")) return;
     b.disabled = true;
-    const {error}=await supabase.from("registrations").update({registration_status:"cancelled"}).eq("id",b.dataset.cancel);
+    const { error } = await  supabase.from("registrations").update({
+      registration_status:"cancelled"
+    }).eq("id",b.dataset.cancel);
     if(error) alert(error.message);
     if (!dashboardRequested) await loadEvents(); if(validInviteToken) await loadInvitedEvent(); await loadAdminEvents();
   }));
 }
+
 function editEvent(e){
-  $("edit-id").value=e.id;$("event-title").value=e.title;$("event-venue").value=e.venue;
+  $("edit-id").value=e.id;
+  $("event-title").value=e.title;
+  $("event-venue").value=e.venue;
   const localStart=toLocal(e.starts_at);
   $("event-date").value=localStart.slice(0,10);
   $("event-hour").value=localStart.slice(11,13);
@@ -629,16 +844,27 @@ function editEvent(e){
   select.value=available ? String(durationMinutes) : "custom";
   $("event-duration-custom").value=String(durationMinutes);
   updateEventEndPreview();
-  $("event-price").value=(e.price_cents/100).toFixed(2);$("event-capacity").value=e.capacity;
-  $("payment-instructions").value=e.payment_instructions||"";$("event-status").value=e.status;$("event-visibility").value=e.visibility||"public";$("event-description").value=e.description||"";
+  $("event-price").value=(e.price_cents/100).toFixed(2);
+  $("event-capacity").value=e.capacity;
+  $("payment-instructions").value=e.payment_instructions||"";
+  $("event-status").value=e.status;
+  $("event-visibility").value=e.visibility||"public";
+  $("event-description").value=e.description||"";
   $("editor-heading").textContent="Edit event";
   $("event-save-message").textContent=originalMinute!==roundedMinute
-    ? "This event used a non-quarter-hour start. The time picker shows the nearest available quarter-hour; review it before saving."
-    : "";
+  ? "This event used a non-quarter-hour start. The time picker shows the nearest available quarter-hour; review it before saving."
+  : "";
 
 }
-function toLocal(s){const d=new Date(s);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
-if(!configured){unavailable();$("admin-message").textContent="Setup required: add the Supabase URL and anon key in app.js.";}
+
+function toLocal(s){
+  const d=new Date(s);
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+if(!configured){
+  unavailable();
+  $("admin-message").textContent="Setup required: add the Supabase URL and anon key in app.js.";
+}
 else {
   loadEvents();
   if (inviteToken !== null) loadInvitedEvent();
