@@ -2023,7 +2023,7 @@ textarea {
 }
 
 /* Phase 3 / peer-feedback patch: separate organizer view and modal event editor. */
-body: not(.organizer-view) .admin-shell {
+body:not(.organizer-view) .admin-shell {
   display: none!important
 }
 
