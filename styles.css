@@ -2023,6 +2023,9 @@ textarea {
 }
 
 /* Phase 3 / peer-feedback patch: separate organizer view and modal event editor. */
+/* Keep organizer login and dashboard completely out of public pages.
+   The dashboard is shown only at ?dashboard=1 when JavaScript adds
+   the organizer-view class to <body>. */
 body:not(.organizer-view) .admin-shell {
   display: none!important
 }
@@ -2459,4 +2462,122 @@ body.organizer-view .site-nav .nav-organizer {
     width: 100%
   }
 
+}
+
+
+/* Mobile event-page and registration-dialog usability fix.
+   Keep this section near the bottom so it overrides earlier responsive rules.
+   Do not modify the event/register JavaScript: this is layout-only. */
+
+/* The dialog itself stays inside the phone's visual viewport; only the form
+   scrolls, leaving the close button visible above it at all times. */
+#signup-dialog {
+  width: min(510px, calc(100vw - 24px));
+  max-width: min(510px, calc(100vw - 24px));
+  max-height: min(760px, calc(100dvh - 24px));
+  overflow: hidden;
+}
+
+#signup-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.signup-dialog-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  gap: 12px;
+  min-height: 58px;
+  padding: 9px 14px 9px 25px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+
+.signup-dialog-toolbar-label {
+  color: #008f99;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.signup-dialog-toolbar .close {
+  position: static;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #edf5f7;
+  color: #35586d;
+  font-size: 29px;
+  line-height: 1;
+  touch-action: manipulation;
+}
+
+.signup-dialog-toolbar .close:hover {
+  background: #dceef2;
+}
+
+.dialog-form {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-top: 20px;
+}
+
+@media (max-width: 650px) {
+  /* In the prior stylesheet, align-items:start carried over from a grid
+     to a mobile flex-column, shrinking the cards to their content width. */
+  .invite-layout {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .invitation-section,
+  .invitation-content,
+  .invite-layout,
+  .invite-hero-panel,
+  .invite-aside,
+  .invite-facts,
+  .invite-about,
+  .invite-disclosure,
+  .invite-roster {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .invite-hero-panel,
+  .invite-aside,
+  .invite-facts,
+  .invite-about,
+  .invite-disclosure {
+    width: 100%;
+  }
+
+  .invite-about {
+    padding: 22px 19px;
+  }
+
+  .invite-hero-panel {
+    padding: 25px 21px;
+  }
+
+  .invite-hero-copy h1 {
+    font-size: clamp(29px, 8vw, 36px);
+  }
+
+  .dialog-form {
+    padding: 19px 19px 23px;
+  }
+
+  .signup-dialog-toolbar {
+    padding: 8px 12px 8px 19px;
+  }
 }

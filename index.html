@@ -80,9 +80,13 @@
 </main>
 <!-- Public registration form; player accounts are not required. -->
 <dialog id="signup-dialog">
+  <!-- Keep the close button outside the scrolling form so it remains reachable on phones. -->
+  <div class="signup-dialog-toolbar">
+    <span class="signup-dialog-toolbar-label">GET IN THE GAME</span>
+    <button type="button" class="close" id="close-dialog" aria-label="Close registration form">×</button>
+  </div>
   <form id="signup-form" class="dialog-form">
-    <button type="button" class="close" id="close-dialog" aria-label="Close">×</button>
-    <p class="form-kicker">GET IN THE GAME</p><h2 id="signup-title">Register for open gym</h2>
+    <h2 id="signup-title">Register for open gym</h2>
     <p id="signup-summary" class="muted"></p>
     <input type="hidden" id="event-id">
     <label>Full name<input id="player-name" maxlength="100" required autocomplete="name"></label>
