@@ -565,12 +565,24 @@ async function refreshAdmin(){
   $("admin-login").hidden=isOrganizer;
   $("admin-panel").hidden=!isOrganizer;
   if (!isOrganizer){
+    ++financeEpoch; // Ignore in-flight finance responses after logout.
+    financeHosts = [];
+    financeTransactions = [];
+    financeEvents = [];
+    $("finance-host-summary").replaceChildren();
+    $("finance-history").replaceChildren();
+    $("finance-stats").replaceChildren();
+    $("finance-status").textContent = "";
+    showDashboardTab("events", false);
     $("admin-events").replaceChildren();
     $("admin-stats").replaceChildren();
   }
   organizerLink.textContent = isOrganizer ? "Organizer Dashboard" : "Organizer Login";
   if (user && !isOrganizer) $("admin-message").textContent="This account does not have organizer access.";
-  if (isOrganizer && dashboardRequested) await loadAdminEvents();
+  if (isOrganizer && dashboardRequested) {
+    if (!$("dashboard-finance-pane").hidden) await loadFinance();
+    else await loadAdminEvents();
+  }
   // Keep the homepage public-only for visitors; add unlisted events only
   // after we have verified the signed-in user is an organizer.
   if (!dashboardRequested && !detailRequested && previousOrganizer!==isOrganizer) await loadEvents();
@@ -874,6 +886,250 @@ function toLocal(s){
   const d=new Date(s);
   return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
 }
+// ── Phase 6: organizer-only community finances ────────────────────────────
+// Ledger hosts are display names, not login accounts. Supabase RLS is the
+// security boundary. Currency is stored and calculated in integer cents.
+let financeHosts = [];
+let financeTransactions = [];
+let financeEvents = [];
+let financeEpoch = 0;
+
+function showDashboardTab(which, refresh = true) {
+  if (!isOrganizer && which === "finance") return;
+  const finance = which === "finance";
+  $("dashboard-events-pane").hidden = finance;
+  $("dashboard-finance-pane").hidden = !finance;
+  for (const [id, selected] of [["dashboard-tab-events", !finance], ["dashboard-tab-finance", finance]]) {
+    $(id).setAttribute("aria-selected", String(selected));
+    $(id).classList.toggle("active", selected);
+  }
+  if (finance && refresh) void loadFinance();
+}
+$("dashboard-tab-events").addEventListener("click", () => showDashboardTab("events"));
+$("dashboard-tab-finance").addEventListener("click", () => showDashboardTab("finance"));
+$("finance-refresh").addEventListener("click", () => void loadFinance());
+
+function financeTypeChanged() {
+  const kind = $("finance-kind").value;
+  const transfer = kind === "transfer";
+  $("finance-host-label").textContent = kind === "collection"
+    ? "Who received the money?" : kind === "expense"
+      ? "Who paid for the expense?" : "Who sent the money?";
+  $("finance-to-wrap").hidden = !transfer;
+  $("finance-to-host").required = transfer;
+  $("finance-event-wrap").hidden = transfer;
+  $("finance-event").disabled = transfer;
+}
+$("finance-kind").addEventListener("change", financeTypeChanged);
+financeTypeChanged();
+
+function financeLocalToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+$("finance-date").value = financeLocalToday();
+
+function populateFinanceChoices() {
+  const hostIds = ["finance-host", "finance-to-host"];
+  for (const id of hostIds) {
+    const select = $(id);
+    const previous = select.value;
+    select.replaceChildren(new Option(financeHosts.length ? "Choose a host" : "Add a host first", ""));
+    for (const host of financeHosts) select.add(new Option(host.name, host.id));
+    select.value = financeHosts.some(h => h.id === previous) ? previous : "";
+  }
+  const events = $("finance-event");
+  const previousEvent = events.value;
+  events.replaceChildren(new Option("Not linked to an event", ""));
+  for (const event of financeEvents) {
+    events.add(new Option(`${new Date(event.starts_at).toLocaleDateString()} · ${event.title}`, event.id));
+  }
+  events.value = financeEvents.some(e => e.id === previousEvent) ? previousEvent : "";
+}
+
+// Fetch all pages, rather than silently omitting older rows from balances.
+async function fetchAllFinanceTransactions() {
+  const rows = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase.from("finance_transactions")
+      .select("*")
+      .order("occurred_on", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) return rows;
+  }
+}
+
+async function loadFinance() {
+  if (!supabase || !isOrganizer || !dashboardRequested) return;
+  const epoch = ++financeEpoch;
+  $("finance-status").textContent = "Loading finance records…";
+  try {
+    const [hostsResult, transactions, eventsResult] = await Promise.all([
+      supabase.from("finance_hosts").select("id,name").order("name"),
+      fetchAllFinanceTransactions(),
+      supabase.from("events").select("id,title,starts_at").order("starts_at", { ascending: false }).limit(500)
+    ]);
+    if (hostsResult.error) throw hostsResult.error;
+    if (eventsResult.error) throw eventsResult.error;
+    if (epoch !== financeEpoch || !isOrganizer) return;
+    financeHosts = hostsResult.data || [];
+    financeTransactions = transactions;
+    financeEvents = eventsResult.data || [];
+    populateFinanceChoices();
+    renderFinances();
+    $("finance-status").textContent = `Showing ${transactions.length} recorded transaction${transactions.length === 1 ? "" : "s"}.`;
+  } catch (error) {
+    if (epoch === financeEpoch) $("finance-status").textContent = `Unable to load finances: ${error.message}`;
+  }
+}
+
+function renderFinances() {
+  const balances = new Map(financeHosts.map(host => [host.id, {
+    name: host.name, spent: 0, collected: 0, sent: 0, received: 0
+  }]));
+  let totalCollected = 0;
+  let totalSpent = 0;
+  for (const row of financeTransactions) {
+    if (row.voided_at) continue;
+    const host = balances.get(row.host_id);
+    const amount = Number(row.amount_cents);
+    if (!host) continue;
+    if (row.kind === "collection") {
+      host.collected += amount;
+      totalCollected += amount;
+    } else if (row.kind === "expense") {
+      host.spent += amount;
+      totalSpent += amount;
+    } else if (row.kind === "transfer") {
+      host.sent += amount;
+      const recipient = balances.get(row.to_host_id);
+      if (recipient) recipient.received += amount;
+    }
+  }
+  const surplus = totalCollected - totalSpent;
+  $("finance-stats").innerHTML = [
+    ["Total collected", totalCollected],
+    ["Community expenses", totalSpent],
+    ["Community net balance", surplus]
+  ].map(([label, cents]) => `<div class="finance-stat"><span>${label}</span><strong>${money(cents)}</strong></div>`).join("");
+
+  const hosts = financeHosts.map(host => {
+    const b = balances.get(host.id);
+    const position = b.collected + b.received - b.spent - b.sent;
+    const className = position > 0 ? "finance-held" : position < 0 ? "finance-owed" : "finance-neutral";
+    const status = position > 0 ? `Holds ${money(position)}` : position < 0
+      ? `Owed ${money(-position)}` : "Settled";
+    return `<tr><td>${esc(b.name)}</td><td class="finance-number">${money(b.spent)}</td>
+      <td class="finance-number">${money(b.collected)}</td>
+      <td class="finance-number">${money(b.received)}</td>
+      <td class="finance-number">${money(b.sent)}</td>
+      <td class="finance-number ${className}">${status}</td></tr>`;
+  }).join("");
+  $("finance-host-summary").innerHTML = financeHosts.length ? `<table class="finance-table">
+    <thead><tr><th>Host</th><th class="finance-number">Paid</th><th class="finance-number">Collected</th><th class="finance-number">Transfers in</th><th class="finance-number">Transfers out</th><th class="finance-number">Net position</th></tr></thead>
+    <tbody>${hosts}</tbody></table>` : `<p class="finance-empty">No hosts yet. Add a host below to start the ledger.</p>`;
+
+  const hostName = id => balances.get(id)?.name || "Unknown host";
+  const kinds = {collection:"Collection",expense:"Expense",transfer:"Transfer"};
+  const history = financeTransactions.map(row => {
+    const names = row.kind === "transfer"
+      ? `${hostName(row.host_id)} → ${hostName(row.to_host_id)}` : hostName(row.host_id);
+    const voided = Boolean(row.voided_at);
+    return `<tr class="${voided ? "finance-history-void" : ""}">
+      <td>${esc(row.occurred_on)}</td>
+      <td>${esc(kinds[row.kind] || row.kind)}${voided ? " (voided)" : ""}</td>
+      <td>${esc(names)}</td>
+      <td class="finance-number ${voided ? "finance-voided" : ""}">${money(Number(row.amount_cents))}</td>
+      <td>${row.event_label ? `${esc(row.event_label)} · ` : ""}${esc(row.note || "")}${voided ? `<div>Reason: ${esc(row.void_reason || "")}</div>` : ""}</td>
+      <td>${voided ? "—" : `<button class="finance-void-button" type="button" data-finance-void="${esc(row.id)}">Void</button>`}</td>
+    </tr>`;
+  }).join("");
+  $("finance-history").innerHTML = financeTransactions.length ? `<table class="finance-table">
+    <thead><tr><th>Date</th><th>Type</th><th>Host(s)</th><th class="finance-number">Amount</th><th>Event / note</th><th>Correction</th></tr></thead>
+    <tbody>${history}</tbody></table>` : `<p class="finance-empty">No transactions yet. Record your first collection or expense above.</p>`;
+
+  $("finance-history").querySelectorAll("[data-finance-void]").forEach(button => button.addEventListener("click", async () => {
+    if (!isOrganizer) return;
+    const reason = window.prompt("Why should this transaction be voided? (This will remain in the history.)");
+    if (reason === null) return;
+    if (reason.trim().length < 3 || reason.trim().length > 500) {
+      window.alert("Enter a reason between 3 and 500 characters.");
+      return;
+    }
+    if (!window.confirm("Void this entry? It will no longer count toward balances, but its history will remain visible.")) return;
+    button.disabled = true;
+    const { error } = await supabase.rpc("finance_void_transaction", {
+      p_transaction_id: button.dataset.financeVoid, p_reason: reason.trim()
+    });
+    if (error) { window.alert(error.message); button.disabled = false; return; }
+    await loadFinance();
+  }));
+}
+
+$("finance-host-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!supabase || !isOrganizer) return;
+  const input = $("finance-new-host");
+  const name = input.value.trim();
+  if (!name) return;
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  $("finance-host-feedback").textContent = "Saving…";
+  try {
+    const { error } = await supabase.from("finance_hosts").insert({ name });
+    if (error) throw error;
+    input.value = "";
+    await loadFinance();
+    $("finance-host-feedback").textContent = `Host added: ${name}`;
+  } catch (error) { $("finance-host-feedback").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
+$("finance-entry-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!supabase || !isOrganizer) return;
+  const kind = $("finance-kind").value;
+  const from = $("finance-host").value;
+  const to = $("finance-to-host").value;
+  const cents = Math.round(Number($("finance-amount").value) * 100);
+  if (!from || !Number.isSafeInteger(cents) || cents < 1 || cents > 100000000) {
+    $("finance-entry-feedback").textContent = "Select a host and enter a valid positive amount."; return;
+  }
+  if (kind === "transfer" && (!to || from === to)) {
+    $("finance-entry-feedback").textContent = "Choose two different hosts for a transfer."; return;
+  }
+  const eventId = kind !== "transfer" ? $("finance-event").value : "";
+  const eventRecord = financeEvents.find(e => e.id === eventId);
+  const entry = {
+    kind,
+    amount_cents: cents,
+    occurred_on: $("finance-date").value,
+    host_id: from,
+    to_host_id: kind === "transfer" ? to : null,
+    event_id: eventId || null,
+    event_label: eventRecord ? `${eventRecord.title} (${new Date(eventRecord.starts_at).toLocaleDateString()})`.slice(0, 200) : null,
+    note: $("finance-note").value.trim()
+  };
+  const button = $("finance-save");
+  button.disabled = true;
+  $("finance-entry-feedback").textContent = "Saving…";
+  try {
+    const { error } = await supabase.from("finance_transactions").insert(entry);
+    if (error) throw error;
+    $("finance-amount").value = "";
+    $("finance-note").value = "";
+    $("finance-event").value = "";
+    await loadFinance();
+    $("finance-entry-feedback").textContent = "Transaction saved.";
+  } catch (error) { $("finance-entry-feedback").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
 if(!configured){
   unavailable();
   $("admin-message").textContent="Setup required: add the Supabase URL and anon key in app.js.";
