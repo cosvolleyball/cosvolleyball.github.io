@@ -91,6 +91,7 @@
     <input type="hidden" id="event-id">
     <label>Full name<input id="player-name" maxlength="100" required autocomplete="name"></label>
     <label>Email address<input id="player-email" type="email" maxlength="254" required autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="email-hint"></label>
+    <p class="signup-email-warning">Double-check your email. Your confirmation and private registration-management link will be sent there.</p>
     <p id="email-hint" class="email-hint" role="status" aria-live="polite">We’ll check the format and flag common domain spelling mistakes. We’ll email your registration status. Please enter an address you can access.</p>
     <label>Phone (optional)<input id="player-phone" type="tel" maxlength="30" autocomplete="tel"></label>
     <label>How will you pay?
@@ -104,6 +105,19 @@
     <button class="button" type="submit" id="submit-signup">Confirm registration</button>
     <p id="signup-error" class="error" role="alert"></p>
   </form>
+</dialog>
+<!-- Only shown after a successful registration response. Never includes management tokens. -->
+<dialog id="registration-success-dialog" aria-labelledby="registration-success-title">
+  <div class="success-dialog-content">
+    <div class="success-check" aria-hidden="true">✓</div>
+    <h2 id="registration-success-title">You're registered!</h2>
+    <p id="registration-success-description">Your registration was received.</p>
+    <p class="success-email-label">You registered with this email:</p>
+    <div class="success-email" id="registration-success-email"></div>
+    <p class="success-reminder"><strong>Check your inbox and Spam/Junk folder.</strong> Your confirmation email should arrive shortly and contains your private link to manage or cancel your registration.</p>
+    <p class="small muted">Entered the wrong email? Contact cospickupvolleyball@gmail.com for help. This popup cannot change the submitted address.</p>
+    <button type="button" class="button" id="registration-success-dismiss">Got it!</button>
+  </div>
 </dialog>
 <!-- Dashboard is a separate ?dashboard=1 view, not part of the homepage. -->
 <section id="admin" class="admin-shell" aria-label="Organizer dashboard">
@@ -151,6 +165,7 @@
             <div class="event-end-preview" role="status" aria-live="polite" aria-atomic="true"><span class="event-end-preview-label">Calculated end time</span><strong id="event-end-preview">Choose an event date</strong><span class="event-end-preview-hint">Calculated automatically using the selected duration.</span></div>
             <label>Price per player (USD)<input id="event-price" type="number" min="0" step="0.01" value="5" required></label>
             <label>Capacity<input id="event-capacity" type="number" min="1" max="500" value="24" required></label>
+            <label>Event host / organizer name<input id="event-host" maxlength="100" placeholder="Name of the person hosting (optional)"></label>
             <label>Payment handle / instructions<input id="payment-instructions" maxlength="240" placeholder="Venmo: @YourHandle"></label>
             <label>Visibility<select id="event-visibility"><option value="public">Public — listed on the website</option><option value="private">Private — invitation link only</option></select></label>
             <label>Registration status<select id="event-status"><option value="published">Published</option><option value="draft">Draft</option><option value="cancelled">Cancelled</option></select></label>

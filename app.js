@@ -2,7 +2,7 @@ import {
   createClient
 } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Public browser configuration.
+// Public browser configuration. Replace only the two placeholders below.
 // These values are safe to expose to a browser: Supabase Row Level Security
 // and our audited RPC functions enforce access. NEVER paste service_role
 // credentials, database passwords, or Gmail tokens into this file.
@@ -117,7 +117,7 @@ async function loadEvents() {
   let privateEvents=[];
   if (isOrganizer && !detailRequested) {
     const { data:privateRows, error:privateError } = await  supabase.from("events")
-    .select("id,title,venue,starts_at,ends_at,price_cents,capacity,description,visibility,invite_token")
+    .select("id,title,venue,starts_at,ends_at,price_cents,capacity,description,host_name,payment_instructions,visibility,invite_token")
     .eq("status","published").eq("visibility","private")
     .gt("ends_at",new Date().toISOString()).order("starts_at",{
       ascending:true
@@ -238,6 +238,10 @@ function eventDetailPage(e, isPrivate) {
         <h2>About this session</h2>
         <p>${esc(description)}</p>
       </div>
+      ${e.host_name || e.payment_instructions ? `<div class="invite-host-payment" aria-label="Hosting and payment details">
+        ${e.host_name ? `<div><span class="invite-section-label">HOSTED BY</span><p>${esc(e.host_name)}</p></div>` : ""}
+        ${e.payment_instructions ? `<div><span class="invite-section-label">PAYMENT INSTRUCTIONS</span><p>${esc(e.payment_instructions)}</p></div>` : ""}
+      </div>` : ""}
       <section id="event-roster" class="roster-section" aria-label="Player roster" aria-live="polite">
         <div class="roster-head"><div><span class="invite-section-label">WHO'S PLAYING</span><h2>Player roster</h2></div><span class="roster-count">Loading…</span></div>
         <p class="roster-loading">Loading registered and waitlisted players…</p>
@@ -452,6 +456,7 @@ $("signup-form").addEventListener("submit",async ev=>{
   $("signup-dialog").close();
   // Email delivery happens asynchronously. Do not claim a message was
   // delivered immediately, and never display the bearer management token.
+  const submittedEmail = $("player-email").value.trim();
   const emailGuidance =
   "A confirmation email should arrive shortly. Check Spam/Junk if you " +
   "don't see it. For help, email cospickupvolleyball@gmail.com.";
@@ -459,11 +464,17 @@ $("signup-form").addEventListener("submit",async ev=>{
   ? "You're on the waitlist (not registered yet). "
   : "You're registered! Your spot is reserved. ";
   notice(registrationMessage + emailGuidance);
-  $("notice").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("registration-success-title").textContent = data?.status === "waitlisted" ? "You're on the waitlist!" : "You're registered!";
+  $("registration-success-description").textContent = data?.status === "waitlisted"
+    ? "You don't have a reserved spot yet. We'll email you if a spot opens."
+    : "Your spot has been reserved.";
+  $("registration-success-email").textContent = submittedEmail;
+  $("registration-success-dialog").showModal();
   $("signup-form").reset();updateEmailHint();
   if (validInviteToken) await loadInvitedEvent();
   else await loadEvents();
 });
+$("registration-success-dismiss").addEventListener("click", () => $("registration-success-dialog").close());
 // The ?manage= route MUST remain available: registration emails include
 // each player's unguessable management token. It is deliberately no longer
 // displayed on the registration success banner or the organizer dashboard.
@@ -660,6 +671,7 @@ $("event-form").addEventListener("submit",async ev=>{
     price_cents: Math.round(Number($("event-price").value) * 100),
     capacity: Number($("event-capacity").value),
     payment_instructions: $("payment-instructions").value.trim(),
+    host_name: $("event-host").value.trim(),
     status: $("event-status").value,
     visibility: $("event-visibility").value,
     description: $("event-description").value.trim()
@@ -847,6 +859,7 @@ function editEvent(e){
   $("event-price").value=(e.price_cents/100).toFixed(2);
   $("event-capacity").value=e.capacity;
   $("payment-instructions").value=e.payment_instructions||"";
+  $("event-host").value=e.host_name||"";
   $("event-status").value=e.status;
   $("event-visibility").value=e.visibility||"public";
   $("event-description").value=e.description||"";
