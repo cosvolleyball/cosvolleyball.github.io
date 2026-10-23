@@ -249,8 +249,8 @@ function eventDetailPage(e, isPrivate) {
       <div class="invite-disclosure">
         <span aria-hidden="true">◈</span>
         <p>${isPrivate
-          ? "<strong>Shared by invitation.</strong> This event doesn't appear in public listings. Anyone with the link can register without an account."
-          : "<strong>Everyone is welcome to register.</strong> This event is publicly listed, and you can share this page with friends. No account is needed."}</p>
+          ? "<strong>Shared by invitation.</strong> This event doesn't appear in public listings. Anyone with the invitation link can register."
+          : "<strong>Everyone is welcome to register.</strong> This event is publicly listed, and you can share this page with friends. Everyone is welcome!"}</p>
       </div>
     </div>
     <aside class="invite-aside" aria-label="Registration information">
@@ -261,7 +261,7 @@ function eventDetailPage(e, isPrivate) {
         <div class="invite-progress" role="progressbar" aria-label="Registered spots" aria-valuemin="0" aria-valuemax="${capacity}" aria-valuenow="${occupied}"><div style="width:${percent}%"></div></div>
         ${full?`<p class="invite-waitlist-note">${Number(e.waitlist_count)||0} on the waitlist. You'll be added to it when you register.</p>`:`<p class="invite-reassurance">Your spot is reserved when you register.</p>`}
         <button class="button invite-register-button" data-register="${esc(e.id)}">${buttonText} <span aria-hidden="true">→</span></button>
-        <p class="invite-booking-footnote">No account required · Pay by Venmo or cash</p>
+        <p class="invite-booking-footnote">Pay by Venmo or cash</p>
       </div>
       <div class="invite-aside-note"><strong>What happens next?</strong><p>Enter your contact details, choose how you'll pay, and you're set. Payment happens separately with the organizer.</p></div>
     </aside>
@@ -509,7 +509,7 @@ async function loadManageRegistration() {
       <p><strong>Status:</strong> <span class="manage-status ${cancelled?'is-cancelled':''}">${esc(reg.registration_status)}</span></p>
     </div>
     ${cancelled ? `<p class="manage-complete">This registration has been cancelled. Your spot is no longer reserved.</p>` :
-      `<p>You can cancel your ${reg.registration_status==='waitlisted'?'waitlist entry':'reserved spot'} here. No account is required.</p>
+      `<p>You can cancel your ${reg.registration_status==='waitlisted'?'waitlist entry':'reserved spot'} here.</p>
        <button type="button" class="button button-danger-outline" id="cancel-my-registration">Cancel my registration</button>`}
     <p class="small muted manage-security">Keep this link private. Anyone with this link can cancel this registration. Refunds, if applicable, must be arranged with the organizer.</p>
   </article>`;
