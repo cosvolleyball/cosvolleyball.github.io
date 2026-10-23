@@ -2596,3 +2596,36 @@ body.organizer-view .site-nav .nav-organizer {
 .success-email{padding:13px;background:#f2f8fa;border:1px solid #d3e8eb;border-radius:10px;font-weight:800;overflow-wrap:anywhere}
 .success-reminder{text-align:left;padding:13px 15px;background:#ecf7ed;border-radius:11px;font-size:14px}
 .success-dialog-content .button{width:100%;margin-top:5px}
+
+/* Phase 5 hotfix: keep the organizer editor inside the viewport.
+   The header stays visible while the form scrolls; no JavaScript changes. */
+.editor-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: min(92dvh, 850px);
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+}
+.editor-dialog[open] .editor-dialog-head {
+  flex: 0 0 auto;
+  position: relative;
+  top: auto;
+}
+.editor-dialog[open] .event-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.editor-dialog[open] .button-row {
+  position: sticky;
+  bottom: -1px;
+  z-index: 1;
+  background: #fff;
+  padding-bottom: 10px;
+}
+@media (max-height: 600px) {
+  .editor-dialog[open] { height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); }
+}
