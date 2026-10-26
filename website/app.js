@@ -53,7 +53,6 @@ if (dashboardRequested) {
 // Detail pages should return home for their Events / About navigation.
 if (detailRequested) {
   $("events-nav").href = "./#events";
-  $("about-nav").href = "./#about";
 }
 
 if (detailRequested) {
