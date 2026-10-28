@@ -443,7 +443,7 @@ $("signup-form").addEventListener("submit",async ev=>{
   const btn=$("submit-signup");btn.disabled=true;btn.textContent="Registering…";$("signup-error").textContent="";
   const { data, error } = await  supabase.rpc("register_for_open_gym",{
     p_event_id:$("event-id").value,p_name:$("player-name").value.trim(),
-    p_email:$("player-email").value.trim(),p_phone:$("player-phone").value.trim()||null,
+    p_email:$("player-email").value.trim(),p_phone:null,
     p_payment_method:$("payment-method").value,
     // The database validates the token; event IDs cannot bypass private-event access.
     p_invite_token: invitedEvent?.id === $("event-id").value ? validInviteToken : null
@@ -727,6 +727,7 @@ function renderRegistrationRow(registration) {
 }
 
 async function loadAdminEvents(){
+  void loadPhase8EventAudit();
   // Chronological order: the next upcoming event should appear first.
   // Keep this ordering for all dashboard filters (including private events).
   const { data:events, error } = await  supabase.from("events").select("*").order("starts_at",{
@@ -1045,11 +1046,12 @@ function renderFinances() {
       <td>${esc(names)}</td>
       <td class="finance-number ${voided ? "finance-voided" : ""}">${money(Number(row.amount_cents))}</td>
       <td>${row.event_label ? `${esc(row.event_label)} · ` : ""}${esc(row.note || "")}${voided ? `<div>Reason: ${esc(row.void_reason || "")}</div>` : ""}</td>
+      <td><div class="small">Recorded by: ${esc(row.created_by_email || row.created_by || "Unknown (older record)")}</div>${voided ? `<div class="small">Voided by: ${esc(row.voided_by_email || row.voided_by || "Unknown")}</div>` : ""}</td>
       <td>${voided ? "—" : `<button class="finance-void-button" type="button" data-finance-void="${esc(row.id)}">Void</button>`}</td>
     </tr>`;
   }).join("");
   $("finance-history").innerHTML = financeTransactions.length ? `<table class="finance-table">
-    <thead><tr><th>Date</th><th>Type</th><th>Host(s)</th><th class="finance-number">Amount</th><th>Event / note</th><th>Correction</th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Host(s)</th><th class="finance-number">Amount</th><th>Event / note</th><th>Accountability</th><th>Correction</th></tr></thead>
     <tbody>${history}</tbody></table>` : `<p class="finance-empty">No transactions yet. Record your first collection or expense above.</p>`;
 
   $("finance-history").querySelectorAll("[data-finance-void]").forEach(button => button.addEventListener("click", async () => {
@@ -1128,6 +1130,49 @@ $("finance-entry-form").addEventListener("submit", async event => {
   } catch (error) { $("finance-entry-feedback").textContent = error.message; }
   finally { button.disabled = false; }
 });
+
+
+// ── Phase 8: organizer-only event accountability ───────────────────────────
+// Authenticated RLS protects event_audit_log. Actor names are snapshotted in
+// the database so they remain readable after an organizer account is removed.
+async function loadPhase8EventAudit() {
+  if (!supabase || !isOrganizer) return;
+  const hostPane = $("dashboard-events-pane");
+  if (!hostPane) return;
+  let panel = $("phase8-event-audit-view");
+  if (!panel) {
+    panel = document.createElement("section");
+    panel.id = "phase8-event-audit-view";
+    panel.className = "finance-card";
+    panel.style.marginTop = "1.5rem";
+    hostPane.appendChild(panel);
+  }
+  panel.innerHTML = '<h3>Recent event activity</h3><p class="muted small">Loading audit history…</p>';
+  const { data, error } = await supabase.from("event_audit_log")
+    .select("id,event_title,action,actor_user_id,actor_email,recorded_at,changes")
+    .order("id", { ascending: false }).limit(50);
+  if (!isOrganizer) return;
+  if (error) {
+    panel.innerHTML = `<h3>Recent event activity</h3><p class="error">${esc(error.message)}</p>`;
+    return;
+  }
+  if (!data?.length) {
+    panel.innerHTML = '<h3>Recent event activity</h3><p class="muted small">No event changes recorded since Phase 8 was installed.</p>';
+    return;
+  }
+  const descriptions = data.map(entry => {
+    const changes = entry.changes || {};
+    const changed = Object.keys(changes).map(key => key.replace(/_/g, " ")).join(", ");
+    const actor = entry.actor_email || entry.actor_user_id || "Unknown organizer";
+    return `<tr><td>${esc(new Date(entry.recorded_at).toLocaleString())}</td>
+      <td>${esc(entry.event_title)}</td><td>${esc(entry.action)}</td>
+      <td>${esc(actor)}</td><td>${esc(changed || "—")}</td></tr>`;
+  }).join("");
+  panel.innerHTML = `<h3>Recent event activity</h3><p class="muted small">Latest 50 changes. Only organizers can see this history.</p>
+    <div class="finance-table-wrap"><table class="finance-table">
+      <thead><tr><th>When</th><th>Event</th><th>Action</th><th>Organizer account</th><th>Fields changed</th></tr></thead>
+      <tbody>${descriptions}</tbody></table></div>`;
+}
 
 if(!configured){
   unavailable();
