@@ -2673,3 +2673,46 @@ body.organizer-view .site-nav .nav-organizer {
 .finance-empty{padding:13px 0;color:var(--muted)}
 @media(max-width:720px){.finance-forms{grid-template-columns:minmax(0,1fr)}.finance-stats{grid-template-columns:minmax(0,1fr)}.finance-card{padding:17px}.finance-heading .button{width:auto}}
 @media(max-width:390px){.finance-form-grid{grid-template-columns:minmax(0,1fr)}.dashboard-tab{flex:1;padding:10px 7px;font-size:13px}}
+/* Mobile event cards: use the full available width for event information. */
+@media (max-width: 650px) {
+  .event-row {
+    grid-template-columns: 82px minmax(0, 1fr);
+    gap: 12px 14px;
+    align-items: start;
+  }
+
+  .event-row .event-date-tile {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .event-row .event-row-main {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .event-row .event-row-main p .icon {
+    flex: 0 0 14px;
+  }
+
+  .event-row .event-row-private-label {
+    display: inline-flex;
+    width: max-content;
+    max-width: 100%;
+    white-space: nowrap;
+  }
+
+  .event-row .event-row-availability {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 4px;
+  }
+
+  .event-row .event-card-actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}
