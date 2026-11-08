@@ -703,28 +703,94 @@ $("admin-filter").addEventListener("change",()=>{
 // ── Organizer event list and registration management ──────────────────────
 // Contact details are visible only after organizer authentication. The private
 // management token is intentionally not retrieved or displayed here.
-function renderRegistrationRow(registration) {
-  const r = registration;
-  const paymentOptions = ["unpaid", "paid", "refunded"].map(status => {
-    const selected = r.payment_status === status ? "selected" : "";
-    const label = status.charAt(0).toUpperCase() + status.slice(1);
-    return `<option value="${status}" ${selected}>${label}</option>`;
-  }).join("");
-
-  const action = r.registration_status === "cancelled"
-    ? `<span class="muted small">Cancelled</span>`
-    : `<button class="button secondary" data-cancel="${esc(r.id)}">Cancel</button>`;
-
-  return `
-    <tr>
-      <td>${esc(r.player_name)}<br><span class="muted small">${esc(r.player_email)}</span></td>
-      <td>${esc(r.registration_status)}</td>
-      <td>${esc(r.payment_method.replace("_", " "))}</td>
-      <td><select data-payment="${esc(r.id)}">${paymentOptions}</select></td>
-      <td><div class="admin-reg-actions">${action}</div></td>
-    </tr>
-  `;
+// ── Phase 9: Event check-in and payment breakdown ───────────────────────────
+// Keep the same player row in view after the dashboard refreshes, making it
+// practical to mark multiple payments on mobile without losing your place.
+async function phase9RefreshRow(control) {
+  const row = control.closest(".phase9-player-row");
+  const id = row?.dataset.player;
+  const top = row?.getBoundingClientRect().top;
+  await loadAdminEvents();
+  if (id && typeof top === "number") {
+    const next = [...document.querySelectorAll(".phase9-player-row")].find(el => el.dataset.player === id);
+    if (next) window.scrollBy(0, next.getBoundingClientRect().top - top);
+  }
 }
+// One designated organizer collects payments for an event. Amounts below are
+// calculated from marked-paid registrations and the CURRENT event fee; they are
+// not a direct Venmo integration or an independent confirmation of payment.
+const phase9Method = r => r.actual_payment_method || r.payment_method || "venmo";
+const phase9MethodNames = {venmo:"Venmo", cash:"Cash", apple_cash:"Apple Cash (legacy)"};
+function phase9RosterRow(r) {
+  const paid = r.payment_status === "paid";
+  const noShow = r.attendance_status === "no_show";
+  const present = r.attendance_status === "present";
+  const eligible = r.registration_status === "registered";
+  const method = phase9Method(r);
+  const options = ["unpaid", "paid", "refunded"].map(status =>
+    `<option value="${status}" ${r.payment_status === status ? "selected" : ""}>${status.charAt(0).toUpperCase()+status.slice(1)}</option>`
+  ).join("");
+  const methods = Object.entries(phase9MethodNames).map(([value,label]) =>
+    `<option value="${value}" ${method === value ? "selected" : ""}>${label}</option>`
+  ).join("");
+  const attendance = [["not_marked", "Not marked"], ["present", "Present"], ["no_show", "No-show"]]
+    .map(([value,label])=>`<option value="${value}" ${(r.attendance_status || "not_marked") === value ? "selected" : ""}>${label}</option>`).join("");
+  const statusLabel = paid ? "✓ Paid" : r.payment_status === "refunded" ? "↩ Refunded" : "● Unpaid";
+  const paymentBadge = paid ? "phase9-badge-paid" : r.payment_status === "refunded" ? "phase9-badge-refunded" : "phase9-badge-unpaid";
+  const attendanceBadge = noShow ? '<span class="phase9-badge phase9-badge-no-show">No-show</span>'
+    : present ? '<span class="phase9-badge phase9-badge-present">Present</span>' : '';
+  const attribution = [
+    r.payment_updated_by_email ? `Payment: ${r.payment_updated_by_email}` : null,
+    r.attendance_updated_by_email ? `Check-in: ${r.attendance_updated_by_email}` : null
+  ].filter(Boolean).join(" · ");
+  const cancel = r.registration_status === "cancelled"
+    ? '<span class="muted small">Cancelled</span>'
+    : `<button class="button secondary" data-cancel="${esc(r.id)}">Cancel</button>`;
+  return `<tr class="phase9-player-row ${eligible && !paid ? "phase9-unpaid-row" : ""}" data-player="${esc(r.id)}">
+    <td data-label="Player" class="phase9-player-cell"><strong>${esc(r.player_name)}</strong>
+      <span class="muted small">${esc(r.player_email)}</span>
+      ${attribution ? `<span class="phase9-updated" title="Last action recorded by organizer account">${esc(attribution)}</span>` : ""}</td>
+    <td data-label="Registration">${esc(r.registration_status)}</td>
+    <td data-label="Payment"><span class="phase9-badge ${paymentBadge}">${statusLabel}</span>
+      <select aria-label="Payment status for ${esc(r.player_name)}" data-payment="${esc(r.id)}">${options}</select></td>
+    <td data-label="Method"><span class="phase9-method-hint">Selected: ${esc(phase9MethodNames[r.payment_method] || r.payment_method)}</span>
+      <select aria-label="Actual payment method for ${esc(r.player_name)}" data-received-method="${esc(r.id)}" ${paid ? "" : "disabled"}>${methods}</select></td>
+    <td data-label="Attendance">${attendanceBadge}
+      <select aria-label="Attendance for ${esc(r.player_name)}" data-attendance="${esc(r.id)}" ${eligible ? "" : "disabled"}>${attendance}</select></td>
+    <td data-label="Action"><div class="admin-reg-actions">${cancel}</div></td>
+  </tr>`;
+}
+
+function phase9RosterPanel(event, registrations) {
+  const fee = Number(event.price_cents) || 0;
+  const paid = registrations.filter(r => r.payment_status === "paid");
+  const sum = method => paid.filter(r => phase9Method(r) === method).length;
+  const venmo = sum("venmo"), cash = sum("cash"), other = paid.length - venmo - cash;
+  const unpaid = registrations.filter(r => r.registration_status === "registered" && r.payment_status === "unpaid").length;
+  const noShow = registrations.filter(r => r.registration_status === "registered" && r.attendance_status === "no_show").length;
+  const present = registrations.filter(r => r.registration_status === "registered" && r.attendance_status === "present").length;
+  const box = (title, value, detail, extraClass="") => `<div class="phase9-metric ${extraClass}"><span>${title}</span><strong>${value}</strong><small>${detail}</small></div>`;
+  return `<section class="phase9-checkin" aria-label="Payment and attendance summary">
+    <div class="phase9-summary">
+      ${box("Venmo marked paid",money(venmo*fee),`${venmo} player${venmo===1?"":"s"}`,"phase9-venmo")}
+      ${box("Cash marked paid",money(cash*fee),`${cash} player${cash===1?"":"s"}`)}
+      ${box("Total marked paid",money(paid.length*fee),`${paid.length} player${paid.length===1?"":"s"}`)}
+      ${box("Still unpaid",String(unpaid),"Registered players","phase9-alert")}
+      ${box("Present",String(present),"Checked in")}
+      ${box("No-shows",String(noShow),"Marked absent")}
+    </div>
+    ${other ? `<p class="phase9-legacy-note">${other} paid registration${other===1?"":"s"} (${money(other*fee)}) recorded through a legacy/other method and included in the total.</p>` : ""}
+    <p class="phase9-summary-note">Totals use marked-paid registrations at the event's listed price; confirm the actual Venmo balance before transferring funds. Attendance does not affect payment totals.</p>
+    <div class="phase9-roster-toolbar"><h5>Player check-in</h5>
+      <button type="button" class="button secondary phase9-unpaid-toggle" data-unpaid-toggle="${esc(event.id)}" aria-pressed="false">Show unpaid only</button>
+    </div>
+    ${registrations.length ? `<div class="phase9-table-scroll"><table class="phase9-roster"><thead><tr><th>Player</th><th>Registration</th><th>Payment</th><th>Method received</th><th>Attendance</th><th>Action</th></tr></thead><tbody>${registrations.map(phase9RosterRow).join("")}</tbody></table></div>` : '<p class="muted small">No registrations yet.</p>'}
+  </section>`;
+}
+
+// Preserve expanded events through roster refreshes and payment/attendance updates.
+// All events start collapsed on the initial load.
+const adminExpandedEventIds = new Set();
 
 async function loadAdminEvents(){
   void loadPhase8EventAudit();
@@ -761,14 +827,24 @@ async function loadAdminEvents(){
     return;
   }
   const parts=await Promise.all(shown.map(async e=>{
-    const { data:regs, error:rerr } = await  supabase.from("registrations").select("id,player_name,player_email,player_phone,payment_method,payment_status,registration_status,created_at").eq("event_id",e.id).order("created_at");
+    const { data:regs, error:rerr } = await  supabase.from("registrations").select("id,player_name,player_email,payment_method,actual_payment_method,payment_status,registration_status,attendance_status,payment_updated_by_email,attendance_updated_by_email,created_at").eq("event_id",e.id).order("created_at");
     if(rerr)return `<article class="admin-event"><h4>${esc(e.title)}</h4><p>${esc(rerr.message)}</p></article>`;
-    const rows = (regs || []).map(renderRegistrationRow).join("");
-    return `<article class="admin-event">
-      <span class="pill">${esc(e.status)}</span>
-      <span class="pill ${e.visibility==="private"?"private-pill":""}">${e.visibility==="private"?"Private · link only":"Public"}</span>
-      <h4>${esc(e.title)}</h4>
-      <p class="muted small">${esc(dateTime(e.starts_at))} · ${esc(e.venue)} · ${money(e.price_cents)} · Capacity ${e.capacity}</p>
+    const checkinPanel = phase9RosterPanel(e, regs || []);
+    const registeredCount = (regs || []).filter(r => r.registration_status === "registered").length;
+    return `<details class="admin-event admin-event-collapsible" data-admin-collapse-id="${esc(e.id)}" ${adminExpandedEventIds.has(String(e.id)) ? "open" : ""}>
+      <summary class="admin-event-collapse-summary" aria-label="Expand or collapse ${esc(e.title)}">
+        <span class="admin-event-collapse-heading">
+          <span class="admin-event-collapse-labels">
+            <span class="pill">${esc(e.status)}</span>
+            <span class="pill ${e.visibility==="private"?"private-pill":""}">${e.visibility==="private"?"Private · link only":"Public"}</span>
+          </span>
+          <strong class="admin-event-collapse-title">${esc(e.title)}</strong>
+          <span class="muted small admin-event-collapse-meta">${esc(dateTime(e.starts_at))} · ${esc(e.venue)} · ${registeredCount} registered / ${e.capacity} spots</span>
+        </span>
+        <span class="admin-event-collapse-chevron" aria-hidden="true"></span>
+      </summary>
+      <div class="admin-event-collapse-content">
+      <p class="muted small">${money(e.price_cents)} per player</p>
       <div class="admin-actions">
         <button class="button secondary" data-edit="${e.id}">Edit event</button>
         <button class="button secondary" data-toggle="${e.id}" data-status="${e.status}">${e.status==="published"?"Unpublish":e.status==="cancelled"?"Reopen as draft":"Publish"}</button>
@@ -777,10 +853,18 @@ async function loadAdminEvents(){
         ${e.status==="published" ? `<a class="button secondary" href="${esc(e.visibility === "private" ? inviteUrl(e.invite_token) : publicEventUrl(e.id))}" target="_blank" rel="noopener noreferrer" aria-label="View ${esc(e.title)} event in a new tab">View event ↗</a>` : ""}
       </div>
       ${e.visibility==="private"&&e.status!=="published"?'<p class="muted small">The event link will work once the event is published.</p>':''}
-      ${rows?`<table><thead><tr><th>Player</th><th>Registration</th><th>Method</th><th>Payment</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`:"<p class='muted small'>No registrations yet.</p>"}
-    </article>`;
+      ${checkinPanel}
+      </div>
+    </details>`;
   }));
   $("admin-events").innerHTML=parts.join("");
+  $("admin-events").querySelectorAll("[data-admin-collapse-id]").forEach(card => {
+    card.addEventListener("toggle", () => {
+      const id = card.dataset.adminCollapseId;
+      if (card.open) adminExpandedEventIds.add(id);
+      else adminExpandedEventIds.delete(id);
+    });
+  });
   $("admin-events").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>openEventEditor(shown.find(e=>e.id===b.dataset.edit))));
   document.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",async()=>{
     const status=b.dataset.status==="published"?"draft":b.dataset.status==="cancelled"?"draft":"published";
@@ -834,10 +918,34 @@ async function loadAdminEvents(){
     notice(`Permanently deleted: ${event.title}. Associated registrations were removed.`);
     if (!dashboardRequested) await loadEvents();if(validInviteToken)await loadInvitedEvent();await loadAdminEvents();
   }));
-  document.querySelectorAll("[data-payment]").forEach(s=>s.addEventListener("change",async()=>{
-    const { error } = await  supabase.from("registrations").update({
-      payment_status:s.value
-    }).eq("id",s.dataset.payment);if(error)alert(error.message);
+  // Phase 9: Updates persist immediately under the existing organizer RLS.
+  // Database trigger records who last changed payment or attendance fields.
+  document.querySelectorAll("[data-payment]").forEach(select => select.addEventListener("change", async () => {
+    select.disabled = true;
+    const method = document.querySelector(`[data-received-method="${select.dataset.payment}"]`)?.value || "venmo";
+    const update = {payment_status: select.value};
+    if (select.value === "paid") update.actual_payment_method = method;
+    const {error} = await supabase.from("registrations").update(update).eq("id", select.dataset.payment);
+    if (error) window.alert(error.message);
+    await phase9RefreshRow(select);
+  }));
+  document.querySelectorAll("[data-received-method]").forEach(select => select.addEventListener("change", async () => {
+    select.disabled = true;
+    const {error} = await supabase.from("registrations").update({actual_payment_method: select.value}).eq("id", select.dataset.receivedMethod);
+    if (error) window.alert(error.message);
+    await phase9RefreshRow(select);
+  }));
+  document.querySelectorAll("[data-attendance]").forEach(select => select.addEventListener("change", async () => {
+    select.disabled = true;
+    const {error} = await supabase.from("registrations").update({attendance_status: select.value}).eq("id", select.dataset.attendance);
+    if (error) window.alert(error.message);
+    await phase9RefreshRow(select);
+  }));
+  document.querySelectorAll("[data-unpaid-toggle]").forEach(button => button.addEventListener("click", () => {
+    const panel = button.closest(".phase9-checkin");
+    const active = panel.classList.toggle("phase9-unpaid-only");
+    button.setAttribute("aria-pressed", String(active));
+    button.textContent = active ? "Show all players" : "Show unpaid only";
   }));
   document.querySelectorAll("[data-cancel]").forEach(b=>b.addEventListener("click",async()=>{
     if (!confirm("Cancel this registration? If the player holds a confirmed spot, the next waitlisted player will be promoted automatically.")) return;
