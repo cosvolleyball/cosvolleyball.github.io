@@ -746,7 +746,8 @@ function phase9RosterRow(r) {
   const cancel = r.registration_status === "cancelled"
     ? '<span class="muted small">Cancelled</span>'
     : `<button class="button secondary" data-cancel="${esc(r.id)}">Cancel</button>`;
-  return `<tr class="phase9-player-row ${eligible && !paid ? "phase9-unpaid-row" : ""}" data-player="${esc(r.id)}">
+  const actionableUnpaid = eligible && !noShow && r.payment_status === "unpaid";
+  return `<tr class="phase9-player-row ${actionableUnpaid ? "phase9-unpaid-row" : ""}" data-player="${esc(r.id)}">
     <td data-label="Player" class="phase9-player-cell"><strong>${esc(r.player_name)}</strong>
       <span class="muted small">${esc(r.player_email)}</span>
       ${attribution ? `<span class="phase9-updated" title="Last action recorded by organizer account">${esc(attribution)}</span>` : ""}</td>
@@ -766,23 +767,24 @@ function phase9RosterPanel(event, registrations) {
   const paid = registrations.filter(r => r.payment_status === "paid");
   const sum = method => paid.filter(r => phase9Method(r) === method).length;
   const venmo = sum("venmo"), cash = sum("cash"), other = paid.length - venmo - cash;
-  const unpaid = registrations.filter(r => r.registration_status === "registered" && r.payment_status === "unpaid").length;
+  const unpaid = registrations.filter(r => r.registration_status === "registered" && r.payment_status === "unpaid" && r.attendance_status !== "no_show").length;
   const noShow = registrations.filter(r => r.registration_status === "registered" && r.attendance_status === "no_show").length;
   const present = registrations.filter(r => r.registration_status === "registered" && r.attendance_status === "present").length;
   const box = (title, value, detail, extraClass="") => `<div class="phase9-metric ${extraClass}"><span>${title}</span><strong>${value}</strong><small>${detail}</small></div>`;
-  return `<section class="phase9-checkin" aria-label="Payment and attendance summary">
+  const unpaidFiltered = phase91UnpaidEventIds.has(String(event.id));
+  return `<section class="phase9-checkin ${unpaidFiltered ? "phase9-unpaid-only" : ""}" aria-label="Payment and attendance summary">
     <div class="phase9-summary">
       ${box("Venmo marked paid",money(venmo*fee),`${venmo} player${venmo===1?"":"s"}`,"phase9-venmo")}
       ${box("Cash marked paid",money(cash*fee),`${cash} player${cash===1?"":"s"}`)}
       ${box("Total marked paid",money(paid.length*fee),`${paid.length} player${paid.length===1?"":"s"}`)}
-      ${box("Still unpaid",String(unpaid),"Registered players","phase9-alert")}
+      ${box("Still unpaid",String(unpaid),"Excludes no-shows","phase9-alert")}
       ${box("Present",String(present),"Checked in")}
       ${box("No-shows",String(noShow),"Marked absent")}
     </div>
     ${other ? `<p class="phase9-legacy-note">${other} paid registration${other===1?"":"s"} (${money(other*fee)}) recorded through a legacy/other method and included in the total.</p>` : ""}
     <p class="phase9-summary-note">Totals use marked-paid registrations at the event's listed price; confirm the actual Venmo balance before transferring funds. Attendance does not affect payment totals.</p>
     <div class="phase9-roster-toolbar"><h5>Player check-in</h5>
-      <button type="button" class="button secondary phase9-unpaid-toggle" data-unpaid-toggle="${esc(event.id)}" aria-pressed="false">Show unpaid only</button>
+      <button type="button" class="button secondary phase9-unpaid-toggle" data-unpaid-toggle="${esc(event.id)}" aria-pressed="${unpaidFiltered}">${unpaidFiltered ? "Show all players" : "Show unpaid only"}</button>
     </div>
     ${registrations.length ? `<div class="phase9-table-scroll"><table class="phase9-roster"><thead><tr><th>Player</th><th>Registration</th><th>Payment</th><th>Method received</th><th>Attendance</th><th>Action</th></tr></thead><tbody>${registrations.map(phase9RosterRow).join("")}</tbody></table></div>` : '<p class="muted small">No registrations yet.</p>'}
   </section>`;
@@ -791,11 +793,15 @@ function phase9RosterPanel(event, registrations) {
 // Preserve expanded events through roster refreshes and payment/attendance updates.
 // All events start collapsed on the initial load.
 const adminExpandedEventIds = new Set();
+// Phase 9.1: upcoming/past event sections and the roster filter stay open/active
+// when recording a payment or attendance causes the dashboard to refresh.
+let adminPastEventsExpanded = false;
+const phase91UnpaidEventIds = new Set();
 
 async function loadAdminEvents(){
   void loadPhase8EventAudit();
-  // Chronological order: the next upcoming event should appear first.
-  // Keep this ordering for all dashboard filters (including private events).
+  // Phase 9.1: upcoming/past event sections, for all event statuses and filters.
+  // An event becomes past after its scheduled end (not at its start).
   const { data:events, error } = await  supabase.from("events").select("*").order("starts_at",{
     ascending:true
   });
@@ -822,11 +828,21 @@ async function loadAdminEvents(){
   `;
   const filter=$("admin-filter").value;
   const shown=filter==="all"?all:all.filter(e=>e.status===filter);
+  const now = Date.now();
+  const isPast = e => {
+    const endsAt = Date.parse(e.ends_at || e.starts_at || "");
+    return Number.isFinite(endsAt) && endsAt <= now;
+  };
+  const upcoming = shown.filter(e => !isPast(e))
+    .sort((a,b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
+  const past = shown.filter(isPast)
+    .sort((a,b) => Date.parse(b.starts_at) - Date.parse(a.starts_at));
+  const ordered = [...upcoming, ...past];
   if(!shown.length){
     $("admin-events").innerHTML=`<div class="dashboard-empty">${all.length?"No events match this filter.":"No events yet. Use Create event to add your first session."}</div>`;
     return;
   }
-  const parts=await Promise.all(shown.map(async e=>{
+  const parts=await Promise.all(ordered.map(async e=>{
     const { data:regs, error:rerr } = await  supabase.from("registrations").select("id,player_name,player_email,payment_method,actual_payment_method,payment_status,registration_status,attendance_status,payment_updated_by_email,attendance_updated_by_email,created_at").eq("event_id",e.id).order("created_at");
     if(rerr)return `<article class="admin-event"><h4>${esc(e.title)}</h4><p>${esc(rerr.message)}</p></article>`;
     const checkinPanel = phase9RosterPanel(e, regs || []);
@@ -857,7 +873,25 @@ async function loadAdminEvents(){
       </div>
     </details>`;
   }));
-  $("admin-events").innerHTML=parts.join("");
+  const upcomingCards = parts.slice(0, upcoming.length).join("");
+  const pastCards = parts.slice(upcoming.length).join("");
+  $("admin-events").innerHTML = `
+    <section class="phase91-events-section" aria-label="Upcoming events">
+      <div class="phase91-events-heading"><h3>Upcoming Events</h3><span class="phase91-events-count">${upcoming.length}</span></div>
+      ${upcoming.length ? upcomingCards : '<p class="muted small phase91-empty">No upcoming events match this filter.</p>'}
+    </section>
+    ${past.length ? `<details class="phase91-past-section" data-phase91-past ${adminPastEventsExpanded ? "open" : ""}>
+      <summary class="phase91-past-heading">
+        <span class="phase91-past-title">Past Events <span class="phase91-events-count">${past.length}</span></span>
+        <span class="phase91-past-chevron" aria-hidden="true"></span>
+      </summary>
+      <div class="phase91-past-content">${pastCards}</div>
+    </details>` : ""}
+  `;
+  const pastSection = $("admin-events").querySelector("[data-phase91-past]");
+  if (pastSection) pastSection.addEventListener("toggle", () => {
+    adminPastEventsExpanded = pastSection.open;
+  });
   $("admin-events").querySelectorAll("[data-admin-collapse-id]").forEach(card => {
     card.addEventListener("toggle", () => {
       const id = card.dataset.adminCollapseId;
@@ -944,6 +978,9 @@ async function loadAdminEvents(){
   document.querySelectorAll("[data-unpaid-toggle]").forEach(button => button.addEventListener("click", () => {
     const panel = button.closest(".phase9-checkin");
     const active = panel.classList.toggle("phase9-unpaid-only");
+    const eventId = button.dataset.unpaidToggle;
+    if (active) phase91UnpaidEventIds.add(eventId);
+    else phase91UnpaidEventIds.delete(eventId);
     button.setAttribute("aria-pressed", String(active));
     button.textContent = active ? "Show all players" : "Show unpaid only";
   }));

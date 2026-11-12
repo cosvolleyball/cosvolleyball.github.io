@@ -2803,3 +2803,31 @@ body.organizer-view .site-nav .nav-organizer {
   .admin-event-collapse-content { padding: 0 15px 16px; }
   .admin-event-collapse-title { font-size: 17px; }
 }
+
+
+/* Phase 9.1 dashboard section grouping - organizer-only. */
+.phase91-events-section { margin-top: 18px; }
+.phase91-events-heading { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.phase91-events-heading h3 { margin: 0; font-size: 21px; color: #173e53; }
+.phase91-events-count { display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; line-height: 1; background: #e8f4f7;
+  color: #205c6c; padding: 6px 9px; border-radius: 999px; }
+.phase91-empty { padding: 16px 0 22px; }
+.phase91-past-section { margin-top: 24px; border-top: 1px solid #d8e6eb; padding-top: 15px; }
+.phase91-past-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px;
+  padding: 12px 5px; cursor: pointer; list-style: none; border-radius: 8px; }
+.phase91-past-heading::-webkit-details-marker { display: none; }
+.phase91-past-heading::marker { content: ""; }
+.phase91-past-heading:hover { background: #f5fafb; }
+.phase91-past-heading:focus-visible { outline: 3px solid #0b8393; }
+.phase91-past-title { display: inline-flex; align-items: center; gap: 10px; font-size: 20px;
+  font-weight: 800; color: #173e53; }
+.phase91-past-chevron { width: 11px; height: 11px; border-right: 2px solid #24516d;
+  border-bottom: 2px solid #24516d; transform: rotate(-45deg); margin-right: 12px;
+  transition: transform 150ms ease; }
+.phase91-past-section[open] .phase91-past-chevron { transform: rotate(45deg); }
+.phase91-past-content { padding-top: 8px; }
+@media (max-width: 650px) {
+  .phase91-events-heading h3, .phase91-past-title { font-size: 18px; }
+  .phase91-past-section { margin-top: 16px; }
+}
