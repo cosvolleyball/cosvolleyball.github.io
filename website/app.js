@@ -772,6 +772,15 @@ function phase9RosterPanel(event, registrations) {
   const present = registrations.filter(r => r.registration_status === "registered" && r.attendance_status === "present").length;
   const box = (title, value, detail, extraClass="") => `<div class="phase9-metric ${extraClass}"><span>${title}</span><strong>${value}</strong><small>${detail}</small></div>`;
   const unpaidFiltered = phase91UnpaidEventIds.has(String(event.id));
+  // Registered players: alphabetical for check-in. Waitlisted players retain
+  // signup order (promotion priority); cancelled/other entries appear last.
+  const displayRegistrations = [
+    ...registrations.filter(r => r.registration_status === "registered")
+      .sort((a,b) => String(a.player_name || "").localeCompare(
+        String(b.player_name || ""), undefined, { sensitivity: "base" })),
+    ...registrations.filter(r => r.registration_status === "waitlisted"),
+    ...registrations.filter(r => r.registration_status !== "registered" && r.registration_status !== "waitlisted")
+  ];
   return `<section class="phase9-checkin ${unpaidFiltered ? "phase9-unpaid-only" : ""}" aria-label="Payment and attendance summary">
     <div class="phase9-summary">
       ${box("Venmo marked paid",money(venmo*fee),`${venmo} player${venmo===1?"":"s"}`,"phase9-venmo")}
@@ -786,7 +795,7 @@ function phase9RosterPanel(event, registrations) {
     <div class="phase9-roster-toolbar"><h5>Player check-in</h5>
       <button type="button" class="button secondary phase9-unpaid-toggle" data-unpaid-toggle="${esc(event.id)}" aria-pressed="${unpaidFiltered}">${unpaidFiltered ? "Show all players" : "Show unpaid only"}</button>
     </div>
-    ${registrations.length ? `<div class="phase9-table-scroll"><table class="phase9-roster"><thead><tr><th>Player</th><th>Registration</th><th>Payment</th><th>Method received</th><th>Attendance</th><th>Action</th></tr></thead><tbody>${registrations.map(phase9RosterRow).join("")}</tbody></table></div>` : '<p class="muted small">No registrations yet.</p>'}
+    ${registrations.length ? `<div class="phase9-table-scroll"><table class="phase9-roster"><thead><tr><th>Player</th><th>Registration</th><th>Payment</th><th>Method received</th><th>Attendance</th><th>Action</th></tr></thead><tbody>${displayRegistrations.map(phase9RosterRow).join("")}</tbody></table></div>` : '<p class="muted small">No registrations yet.</p>'}
   </section>`;
 }
 
