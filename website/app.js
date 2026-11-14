@@ -462,11 +462,13 @@ $("signup-form").addEventListener("submit",async ev=>{
   const registrationMessage = data?.status === "waitlisted"
   ? "You're on the waitlist (not registered yet). "
   : "You're registered! Your spot is reserved. ";
-  notice(registrationMessage + emailGuidance);
+  // The database controls eligibility; this text only reflects its response.
+  const eligibilityNotice = typeof data?.eligibility_notice === "string" ? data.eligibility_notice : "";
+  notice(registrationMessage + (eligibilityNotice ? eligibilityNotice + " " : "") + emailGuidance);
   $("registration-success-title").textContent = data?.status === "waitlisted" ? "You're on the waitlist!" : "You're registered!";
-  $("registration-success-description").textContent = data?.status === "waitlisted"
+  $("registration-success-description").textContent = eligibilityNotice || (data?.status === "waitlisted"
     ? "You don't have a reserved spot yet. We'll email you if a spot opens."
-    : "Your spot has been reserved.";
+    : "Your spot has been reserved.");
   $("registration-success-email").textContent = submittedEmail;
   $("registration-success-dialog").showModal();
   $("signup-form").reset();updateEmailHint();
@@ -540,6 +542,119 @@ $("signout").addEventListener("click",async()=>{
 });
 supabase?.auth.onAuthStateChange(()=>setTimeout(refreshAdmin,0));
 
+// ── Phase 10: organizer-only player access rules ───────────────────────────
+// All writes use a SECURITY DEFINER RPC with an independent organizer check.
+// Anonymous visitors cannot read the access tables through RLS.
+let phase10AccessEpoch = 0;
+const phase10Date = value => value ? new Date(value).toLocaleString("en-US") : "—";
+
+async function loadPhase10Access() {
+  if (!supabase || !isOrganizer || !dashboardRequested || !$("phase10-access-panel").open) return;
+  const epoch = ++phase10AccessEpoch;
+  $("phase10-access-list").textContent = "Loading rules…";
+  $("phase10-access-history").textContent = "Loading history…";
+  const [rulesResult, auditResult] = await Promise.all([
+    supabase.from("volleyball_player_access")
+      .select("email,rule_type,expires_at,reason,updated_at,updated_by_email")
+      .order("updated_at", { ascending: false }).limit(200),
+    supabase.from("volleyball_player_access_audit")
+      .select("email,action,reason,actor_email,recorded_at")
+      .order("id", { ascending: false }).limit(40)
+  ]);
+  if (!isOrganizer || epoch !== phase10AccessEpoch) return;
+  const list = $("phase10-access-list");
+  const history = $("phase10-access-history");
+  if (rulesResult.error) {
+    list.textContent = "Unable to load access rules: " + rulesResult.error.message;
+  } else {
+    const rules = rulesResult.data || [];
+    const now = Date.now();
+    const active = rules.filter(r => r.rule_type === "banned" ||
+      Date.parse(r.expires_at || "") > now);
+    const expired = rules.length - active.length;
+    const rows = active.map(r => {
+      const state = r.rule_type === "banned"
+        ? "Banned"
+        : "Restricted until " + phase10Date(r.expires_at);
+      return `<tr><td>${esc(r.email)}</td><td>${esc(state)}</td>
+        <td>${esc(r.reason)}</td><td>${esc(r.updated_by_email || "Unknown")}</td>
+        <td><button type="button" class="button secondary" data-phase10-manage="${esc(r.email)}">Manage</button></td></tr>`;
+    }).join("");
+    list.innerHTML = active.length ? `<div class="phase10-table-scroll"><table class="phase10-table">
+      <thead><tr><th>Email</th><th>Status</th><th>Reason</th><th>Updated by</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`
+      : '<p class="small muted">No active restrictions or bans.</p>';
+    if (expired) list.insertAdjacentHTML("beforeend",
+      `<p class="small muted">${expired} expired restriction${expired===1?"":"s"} kept in the audit records.</p>`);
+    list.querySelectorAll("[data-phase10-manage]").forEach(button =>
+      button.addEventListener("click", () => {
+        $("phase10-email").value = button.dataset.phase10Manage;
+        $("phase10-action").value = "clear";
+        $("phase10-action").dispatchEvent(new Event("change"));
+        $("phase10-email").focus();
+      })
+    );
+  }
+  if (auditResult.error) {
+    history.textContent = "Unable to load access history: " + auditResult.error.message;
+  } else {
+    const changes = auditResult.data || [];
+    history.innerHTML = changes.length
+      ? `<div class="phase10-table-scroll"><table class="phase10-table">
+        <thead><tr><th>When</th><th>Player email</th><th>Action</th><th>Organizer</th><th>Reason</th></tr></thead>
+        <tbody>${changes.map(r => `<tr><td>${esc(phase10Date(r.recorded_at))}</td>
+          <td>${esc(r.email)}</td><td>${esc(r.action)}</td><td>${esc(r.actor_email || "Unknown")}</td>
+          <td>${esc(r.reason || "—")}</td></tr>`).join("")}</tbody></table></div>`
+      : '<p class="small muted">No access changes recorded.</p>';
+  }
+}
+$("phase10-access-panel").addEventListener("toggle", () => {
+  if ($("phase10-access-panel").open) void loadPhase10Access();
+  else ++phase10AccessEpoch;
+});
+$("phase10-action").addEventListener("change", () => {
+  const clearing = $("phase10-action").value === "clear";
+  $("phase10-reason").required = !clearing;
+  $("phase10-reason").minLength = clearing ? 0 : 3;
+});
+$("phase10-action").dispatchEvent(new Event("change"));
+$("phase10-access-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!supabase || !isOrganizer) return;
+  const email = $("phase10-email").value.trim();
+  const action = $("phase10-action").value;
+  const reason = $("phase10-reason").value.trim();
+  if (action !== "clear" && (reason.length < 3 || reason.length > 240)) {
+    $("phase10-feedback").textContent = "Enter a reason between 3 and 240 characters.";
+    return;
+  }
+  if (action === "ban" && !window.confirm(
+    "Ban new registrations for " + email + " until an organizer removes the ban? Existing reserved spots are not cancelled."
+  )) return;
+  if (action === "clear" && !window.confirm(
+    "Remove the active restriction or ban for " + email + "? Eligible waitlisted players may be promoted automatically."
+  )) return;
+  const button = $("phase10-save");
+  button.disabled = true;
+  $("phase10-feedback").textContent = "Saving…";
+  try {
+    const { error } = await supabase.rpc("volleyball_organizer_set_access", {
+      p_email: email, p_action: action, p_reason: reason || null
+    });
+    if (error) throw error;
+    $("phase10-feedback").textContent = action === "restrict" ? "15-day restriction saved."
+      : action === "ban" ? "Permanent ban saved." : "Access rule removed.";
+    $("phase10-reason").value = "";
+    await loadPhase10Access();
+    // Removing a rule may fill vacancies; refresh the event roster too.
+    await loadAdminEvents();
+  } catch (error) {
+    $("phase10-feedback").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
 // ── Organizer authorization and dashboard ─────────────────────────────────
 async function refreshAdmin(){
   const refreshId=++adminRefreshEpoch;
@@ -565,6 +680,10 @@ async function refreshAdmin(){
   $("admin-panel").hidden=!isOrganizer;
   if (!isOrganizer){
     ++financeEpoch; // Ignore in-flight finance responses after logout.
+    ++phase10AccessEpoch; // Clear sensitive access results after logout.
+    $("phase10-access-panel").open = false;
+    $("phase10-access-list").replaceChildren();
+    $("phase10-access-history").replaceChildren();
     financeHosts = [];
     financeTransactions = [];
     financeEvents = [];
