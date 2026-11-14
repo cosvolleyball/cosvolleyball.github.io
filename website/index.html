@@ -144,6 +144,30 @@
       <button id="dashboard-tab-finance" type="button" class="dashboard-tab" role="tab" aria-controls="dashboard-finance-pane" aria-selected="false">Community Finances</button>
     </div>
     <div id="dashboard-events-pane" role="tabpanel" aria-labelledby="dashboard-tab-events">
+      <!-- Phase 10 access rules. Hidden inside authenticated organizer pane. -->
+      <details id="phase10-access-panel" class="phase10-access-panel">
+        <summary>Player restrictions & bans <span class="small muted">Organizer only</span></summary>
+        <div class="phase10-access-content">
+          <p class="small muted">Restrict an email for 15 days (new registrations join the waitlist), permanently ban new registrations, or remove a rule. Existing confirmed spots are not automatically cancelled. Changes are logged by organizer account.</p>
+          <form id="phase10-access-form" class="phase10-access-form">
+            <label>Player email<input id="phase10-email" type="email" required maxlength="254" autocomplete="off" placeholder="player@example.com"></label>
+            <label>Action<select id="phase10-action">
+              <option value="restrict">Restrict for 15 days</option>
+              <option value="ban">Ban new registrations permanently</option>
+              <option value="clear">Remove existing restriction / ban</option>
+            </select></label>
+            <label>Reason / note<textarea id="phase10-reason" rows="2" maxlength="240" placeholder="e.g., repeated no-shows"></textarea></label>
+            <button type="submit" class="button" id="phase10-save">Save access rule</button>
+            <p id="phase10-feedback" role="status" aria-live="polite" class="small"></p>
+          </form>
+          <h4>Current rules</h4>
+          <div id="phase10-access-list" class="phase10-access-list"><p class="small muted">Open this panel to load access rules.</p></div>
+          <details class="phase10-history">
+            <summary>Recent access changes</summary>
+            <div id="phase10-access-history" class="phase10-access-history"></div>
+          </details>
+        </div>
+      </details>
       <div id="admin-stats" class="admin-stats" aria-label="Event summary"></div>
       <div class="dashboard-list-toolbar"><div><span class="section-kicker">EVENT MANAGEMENT</span><h2>Events and registrations</h2></div><label class="dashboard-filter">Show<select id="admin-filter"><option value="all">All events</option><option value="published">Published</option><option value="draft">Drafts</option><option value="cancelled">Cancelled</option></select></label></div>
       <div id="admin-events"></div>
