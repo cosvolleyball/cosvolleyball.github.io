@@ -12,7 +12,7 @@ const optionsCode=fs.readFileSync(path.join(root,"rotation-options.mjs"),"utf8")
   .replace("export function rotationOptions","function rotationOptions");
 
 async function boot({initialSnapshot,organizer=false,organizerRoster=[],
-  lineupByGame={},organizerAppearances={}}={}){
+  lineupByGame={},organizerAppearances={},transferHistory=[]}={}){
   const dom=new JSDOM(page,{
     url:"https://test.local/teams/",
     runScripts:"outside-only",
@@ -65,6 +65,7 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
         return {data:lineupByGame[args?.p_game_id]||[],error:null};
       if(name==="tm_org_game_appearances")
         return {data:organizerAppearances[args?.p_game_id]||[],error:null};
+      if(name==="tm_org_transfers")return {data:transferHistory,error:null};
       if(name==="tm_org_stats")return {data:[],error:null};
       return {data:null,error:null};
     }
@@ -426,5 +427,39 @@ test("bursts of public Broadcast signals are coalesced, avoiding an RPC storm",a
     const added=t.calls.filter(c=>c.name==="tm_public_snapshot").length-before;
     assert(added<=2,`Unexpected snapshot query storm: ${added}`);
     assert(added>=1,"At least one invalidation should be fetched");
+  }finally{t.close();}
+});
+
+test("organizers can correct a previously recorded five-team transfer",async()=>{
+  const teams=makeTeams(5);
+  const snapshot={
+    active:true,session_id:"session",format:5,revision:2,
+    rotation_id:"rot",rotation_status:"published",
+    event_title:"Open gym",teams,
+    games:[{id:"game1",round:1,court:1,status:"ready",
+      team_a_id:"team1",team_b_id:"team2",winner_team_id:null}]
+  };
+  const publicView=await boot({initialSnapshot:snapshot});
+  try{
+    assert(publicView.dom.window.document.querySelector("#tm-organizer").hidden);
+    assert(!publicView.calls.some(c=>c.name==="tm_org_transfers"));
+  }finally{publicView.close();}
+  const t=await boot({initialSnapshot:snapshot,organizer:true,
+    transferHistory:[{
+      player_id:"person1",name:"Person 1",
+      current_team_id:"team2",previous_team_id:"team1"
+    }]
+  });
+  try{
+    const doc=t.dom.window.document;
+    const panel=doc.querySelector("#tm-transfer-correction");
+    assert(!panel.hidden);
+    doc.querySelector("#tm-transfer-correction-player").value="person1";
+    doc.querySelector("#tm-transfer-correction-team").value="team1";
+    doc.querySelector("#tm-transfer-correction-save").click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_org_correct_transfer"&&
+      c.args?.p_session_player_id==="person1"&&
+      c.args?.p_to_team_id==="team1"));
   }finally{t.close();}
 });
