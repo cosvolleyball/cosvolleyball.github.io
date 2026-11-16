@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { generateBalancedTeams, scoreBalancedDraft } from "./balancing.mjs";
+import { generateBalancedTeams, scoreBalancedDraft, suggestSharedRolePairs } from "./balancing.mjs";
+import { rotationOptions } from "./rotation-options.mjs";
 
 // Public publishable browser credentials, matching the main site's client.
 // Never embed service_role credentials or privileged data in this module.
@@ -22,6 +23,7 @@ const state = {
   lastPrivateSessionId: null,
   adjustRenderKey: null,
   appearanceRenderKey: null,
+  choicesKey: null,
   correctionAppearances: [],
   refreshing: false
 };
@@ -331,9 +333,11 @@ function scoreCurrentDraft() {
   state.draft.qualityScore=scoreBalancedDraft(players,state.draft.teams,{
     ...settings,
     teamCount:state.draft.teams.length,
-    format:Number(state.snapshot.format),
+    format:state.draft.playingFormat,
     priorTeammates:state.priorTeammates
   });
+  state.draft.sharedRolePairs=suggestSharedRolePairs(
+    players,state.draft.teams,state.draft.playingFormat);
 }
 function rememberEdit() {
   state.undoStack.push(JSON.parse(JSON.stringify(state.draft.teams)));
@@ -356,7 +360,7 @@ function editDraft(type,playerId,targetId) {
   } else {
     const destination=teams.find(t=>String(t.seed)===String(targetId));
     if (!destination || destination===source) throw new Error("Choose another team.");
-    const minimum=teams.length===6?4:Number(state.snapshot.format);
+    const minimum=teams.length===6?4:state.draft.playingFormat;
     if(source.playerIds.length<=minimum){
       throw new Error("That transfer would leave the source team too small.");
     }
@@ -492,6 +496,66 @@ function renderAppearanceCorrection() {
   }
 }
 
+function selectedRotationChoice() {
+  const formats=Array.isArray(state.snapshot?.allowed_formats)
+    ? state.snapshot.allowed_formats : [4,5,6];
+  const all=rotationOptions(state.roster.filter(p=>
+    ["present","waiting"].includes(p.attendance)).length,{
+      privateEvent:!formats.includes(5)
+    });
+  return all.find(choice=>choice.teamCount===Number($("tm-team-count").value)
+    &&choice.format===Number($("tm-draft-format").value));
+}
+function updateRotationChoices(resetFormat = false) {
+  const formats=Array.isArray(state.snapshot?.allowed_formats)
+    ? state.snapshot.allowed_formats : [4,5,6];
+  const count=state.roster.filter(p=>
+    ["present","waiting"].includes(p.attendance)).length;
+  const all=rotationOptions(count,{privateEvent:!formats.includes(5)});
+  const key=state.snapshot?.session_id+":"+count+":"+formats.join(",");
+  const teamPicker=$("tm-team-count");
+  const formatPicker=$("tm-draft-format");
+  const availableTeams=[...new Set(all.map(c=>c.teamCount))].sort((a,b)=>b-a);
+  if(key!==state.choicesKey) {
+    state.choicesKey=key;
+    const oldTeam=Number(teamPicker.value);
+    teamPicker.innerHTML=availableTeams.map(n=>
+      '<option value="'+n+'">'+n+' teams</option>').join("");
+    if(availableTeams.includes(oldTeam))teamPicker.value=String(oldTeam);
+    else if(availableTeams.length)teamPicker.value=String(availableTeams[0]);
+    resetFormat=true;
+  }
+  const teamCount=Number(teamPicker.value);
+  const eligible=all.filter(c=>c.teamCount===teamCount);
+  const oldFormat=Number(formatPicker.value);
+  formatPicker.innerHTML=eligible.map(c=>
+    '<option value="'+c.format+'">'+c.format+'v'+c.format+
+      (c.needsBorrowedSubs?' (borrowed subs needed)':'')+
+      (c.recommended?' · recommended':'')+
+    '</option>').join("");
+  let preferred=eligible.find(c=>c.recommended);
+  // Favor the largest sensible playing format for a chosen team count.
+  preferred=[...eligible].filter(c=>c.recommended)
+    .sort((a,b)=>b.format-a.format)[0]||eligible[0];
+  if(eligible.length) {
+    formatPicker.value=String(!resetFormat &&
+      eligible.some(c=>c.format===oldFormat)?oldFormat:preferred.format);
+  }
+  teamPicker.disabled=!availableTeams.length;
+  formatPicker.disabled=!eligible.length;
+  const choice=selectedRotationChoice();
+  $("tm-distribution-summary").textContent=choice
+    ? count+" checked in and available · "+choice.summary+
+      " · "+choice.format+" on court per team"+
+      (choice.needsBorrowedSubs
+        ?" · Volunteer same-court substitutes needed for short rosters." : "")+
+      (choice.sizes.some(n=>n>choice.format)
+        ?" · Extra roster members may rotate into a game." : "")
+    : count+" available · No supported team distribution at this attendance count.";
+  $("tm-draft-balance-positions").disabled=!choice||choice.format===4;
+  if(choice?.format===4)$("tm-draft-balance-positions").checked=false;
+  if(!choice)$("tm-generate").disabled=true;
+}
 function renderOrganizer() {
   if(!state.isOrganizer)return;
   const active=Boolean(state.snapshot?.active);
@@ -500,10 +564,8 @@ function renderOrganizer() {
   if(!active)return;
   const rotation=state.snapshot;
   const activeRotation=rotation.rotation_status==="published";
-  const isFour=Number(rotation.format)===4;
-  $("tm-draft-balance-positions").disabled=isFour;
-  if(isFour)$("tm-draft-balance-positions").checked=false;
-  $("tm-generate").disabled=activeRotation;
+  updateRotationChoices();
+  $("tm-generate").disabled=activeRotation || !selectedRotationChoice();
   const canEnd=activeRotation && (rotation.games||[]).length>0;
   $("tm-end-rotation").disabled=!canEnd;
   const allComplete=canEnd && rotation.games.every(g=>g.status==="completed");
@@ -525,7 +587,8 @@ async function loadPrivate() {
   state.stats=Array.isArray(stats)?stats:[];
   state.priorTeammates=Array.isArray(pairs)?pairs:[];
   if(remote && (!state.draft || state.savedDraftId)){
-    state.draft={teams:remote.teams,qualityScore:null};
+    state.draft={teams:remote.teams,qualityScore:null,
+      playingFormat:remote.playing_format};
     state.savedDraftId=remote.rotation_id;
     state.undoStack=[];
   }
@@ -691,6 +754,14 @@ $("tm-public-content").addEventListener("click",e=>{
   });
 });
 
+$("tm-team-count").addEventListener("change",()=>{
+  updateRotationChoices(true);
+  if(state.draft)feedback("Team count changed. Generate a new preview before publishing.");
+});
+$("tm-draft-format").addEventListener("change",()=>{
+  updateRotationChoices(false);
+  if(state.draft)feedback("Playing format changed. Generate a new preview before publishing.");
+});
 $("tm-source-event").addEventListener("change",constrainFormat);
 $("tm-format").addEventListener("change",constrainFormat);
 $("tm-start-form").addEventListener("submit",e=>{e.preventDefault();void action(async()=>{
@@ -791,7 +862,8 @@ $("tm-generate").addEventListener("click",()=>void action(async()=>{
   const available=state.roster.filter(p=>["present","waiting"].includes(p.attendance));
   const byEmail=new Map(state.stats.map(p=>[p.email,Number(p.regular_games)||0]));
   const chosen=Number($("tm-team-count").value);
-  const format=Number(state.snapshot.format);
+  const format=Number($("tm-draft-format").value);
+  if(!selectedRotationChoice())throw new Error("Unsupported team count or playing format.");
   const opts={
     teamCount:chosen,format,priorTeammates:state.priorTeammates,
     balanceSkill:$("tm-draft-balance-skill").checked,
@@ -802,6 +874,9 @@ $("tm-generate").addEventListener("click",()=>void action(async()=>{
     id:p.id,skill:p.skill,gender:p.gender,positions:p.positions,
     regularGames:byEmail.get(p.email)||0
   })),opts);
+  state.draft.playingFormat=format;
+  state.draft.sharedRolePairs=suggestSharedRolePairs(
+    available,state.draft.teams,format);
   state.draft.initialScore=state.draft.qualityScore;
   state.undoStack=[];state.savedDraftId=null;
   feedback("New private team preview generated. Review before publishing.");
@@ -832,10 +907,16 @@ $("tm-undo").addEventListener("click",()=>{
 });
 $("tm-save-draft").addEventListener("click",()=>void action(async()=>{
   if(!state.draft)throw new Error("Generate teams first.");
+  if(Number($("tm-team-count").value)!==state.draft.teams.length ||
+      Number($("tm-draft-format").value)!==state.draft.playingFormat)
+    throw new Error("Choices changed. Generate a new preview before saving.");
   state.savedDraftId=await rpc("tm_org_save_draft",{
     p_session_id:state.snapshot.session_id,
     p_expected_revision:state.snapshot.revision,
-    p_teams:state.draft.teams
+    p_teams:{
+      playing_format:state.draft.playingFormat,
+      teams:state.draft.teams
+    }
   });
   feedback("Draft saved privately. Only publishing makes teams visible.");
   await refresh(true);
@@ -843,6 +924,9 @@ $("tm-save-draft").addEventListener("click",()=>void action(async()=>{
 }));
 $("tm-publish").addEventListener("click",()=>void action(async()=>{
   if(!state.savedDraftId)throw new Error("Save your draft first.");
+  if(Number($("tm-team-count").value)!==state.draft?.teams?.length ||
+     Number($("tm-draft-format").value)!==state.draft?.playingFormat)
+    throw new Error("Choices changed. Regenerate and save the selected format first.");
   if(!window.confirm("Publish these teams for everyone to see?"))return;
   await rpc("tm_org_publish_draft",{
     p_session_id:state.snapshot.session_id,
