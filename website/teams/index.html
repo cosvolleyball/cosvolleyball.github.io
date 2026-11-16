@@ -112,7 +112,9 @@
 
         <section class="tm-panel" aria-labelledby="tm-draft-title">
           <h3 id="tm-draft-title">Generate balanced teams</h3>
-          <p>Preview as many combinations as needed, make local swaps and publish only when ready.</p>
+          <p>Before every reshuffle, choose how many teams and the on-court format.
+            Only currently checked-in and available players are included.
+            Preview, regenerate or make swaps before publishing.</p>
           <div class="tm-checks">
             <label><input id="tm-draft-balance-skill" type="checkbox" checked> Balance skill (1–10)</label>
             <label><input id="tm-draft-balance-gender" type="checkbox"> Balance gender</label>
@@ -124,9 +126,16 @@
               <option value="5">5 teams</option>
               <option value="4">4 teams</option>
             </select></label>
+            <label>Playing format<select id="tm-draft-format" aria-describedby="tm-distribution-summary">
+              <option value="6">6v6</option><option value="5">5v5</option>
+              <option value="4">4v4</option>
+            </select></label>
             <button type="button" id="tm-generate" class="tm-button">Generate / regenerate</button>
             <button type="button" id="tm-undo" class="tm-button tm-secondary" disabled>Undo last edit</button>
           </div>
+          <p id="tm-distribution-summary" class="tm-muted" role="status" aria-live="polite">
+            Select a team count and playing format to see the distribution.
+          </p>
           <div id="tm-draft" class="tm-draft" aria-live="polite">
             <p class="tm-muted">No draft generated yet.</p>
           </div>
