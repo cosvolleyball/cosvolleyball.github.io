@@ -32,7 +32,7 @@ begin
     '22222222-2222-4222-8222-222222222222', true);
   begin
     perform public.tm_org_start_session(
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',6,true,false,false);
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',6::smallint,true,false,false);
     raise exception 'Non-organizer unexpectedly started a session';
   exception when insufficient_privilege then
     null; -- expected
@@ -43,9 +43,9 @@ begin
   perform set_config('request.jwt.claim.sub',
     '11111111-1111-4111-8111-111111111111', true);
   v_profile := public.tm_org_save_profile(' Alice@Example.com ','Alice',
-    8,'female',array['setter','outside']);
+    8::smallint,'female',array['setter','outside']);
   v_session := public.tm_org_start_session(
-    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',6,true,true,true);
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',6::smallint,true,true,true);
 
   v_roster := public.tm_org_roster(v_session);
   if jsonb_array_length(v_roster) <> 2 then
@@ -71,7 +71,7 @@ begin
   -- Single active session is protected at DATABASE level, not UI level.
   begin
     perform public.tm_org_start_session(
-      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',6,true,false,false);
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',6::smallint,true,false,false);
     raise exception 'A second active session unexpectedly succeeded';
   exception when unique_violation then
     null; -- expected
@@ -130,7 +130,7 @@ begin
 
   -- Old event/session is complete; a new session starts cleanly.
   v_next := public.tm_org_start_session(
-    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',4,true,false,true);
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',4::smallint,true,false,true);
   if (select balance_positions from public.tm_sessions where id=v_next) then
     raise exception '4v4 must disable position balancing';
   end if;
