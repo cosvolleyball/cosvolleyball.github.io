@@ -251,6 +251,9 @@ function renderOrganizer() {
   if(!active)return;
   const rotation=state.snapshot;
   const activeRotation=rotation.rotation_status==="published";
+  const isFour=Number(rotation.format)===4;
+  $("tm-draft-balance-positions").disabled=isFour;
+  if(isFour)$("tm-draft-balance-positions").checked=false;
   $("tm-generate").disabled=activeRotation;
   const canEnd=activeRotation && (rotation.games||[]).length>0;
   $("tm-end-rotation").disabled=!canEnd;
@@ -388,9 +391,9 @@ $("tm-generate").addEventListener("click",()=>void action(async()=>{
   const format=Number(state.snapshot.format);
   const opts={
     teamCount:chosen,format,priorTeammates:[],
-    balanceSkill:$("tm-balance-skill").checked,
-    balanceGender:$("tm-balance-gender").checked,
-    balancePositions:format!==4&&$("tm-balance-positions").checked
+    balanceSkill:$("tm-draft-balance-skill").checked,
+    balanceGender:$("tm-draft-balance-gender").checked,
+    balancePositions:format!==4&&$("tm-draft-balance-positions").checked
   };
   state.draft=generateBalancedTeams(available.map(p=>({
     id:p.id,skill:p.skill,gender:p.gender,positions:p.positions,
