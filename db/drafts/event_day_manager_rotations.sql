@@ -207,6 +207,27 @@ begin
     raise exception 'Draft has unsupported team count' using errcode='22023';
   end if;
 
+  -- A draft is not automatically valid forever. Check against the CURRENT
+  -- available roster and profile edits, even if the caller presents the
+  -- latest revision after a check-in or departure.
+  if exists (
+    select 1 from public.tm_memberships m
+    join public.tm_session_players sp on sp.id=m.session_player_id
+    join public.tm_profiles p on p.id=sp.profile_id
+    join public.tm_rotations r on r.id=m.rotation_id
+    where m.rotation_id=v_rotation
+      and (sp.attendance not in ('present','waiting') or
+           p.updated_at > r.created_at)
+  ) or (
+    select count(*) from public.tm_memberships where rotation_id=v_rotation
+  ) <> (
+    select count(*) from public.tm_session_players
+    where session_id=p_session_id and attendance in ('present','waiting')
+  ) then
+    raise exception 'Player availability or profiles changed; regenerate teams'
+      using errcode='22023';
+  end if;
+
   update public.tm_rotations set status='published',published_at=now()
     where id=v_rotation;
 
