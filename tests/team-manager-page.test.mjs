@@ -39,6 +39,7 @@ test("all Teams Manager organizer actions are named and accessible",()=>{
     "tm-start-form","tm-source-event","tm-format","tm-walkin-form",
     "tm-walkin-name","tm-walkin-email","tm-generate","tm-draft",
     "tm-save-draft","tm-publish","tm-end-rotation","tm-end-session",
+    "tm-draft-format","tm-distribution-summary",
     "tm-roster-adjust","tm-arrival-player","tm-arrival-team",
     "tm-replace-player","tm-assign-arrival",
     "tm-appearance-correction","tm-correct-game",
