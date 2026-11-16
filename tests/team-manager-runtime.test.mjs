@@ -15,6 +15,7 @@ async function boot({initialSnapshot,organizer=false}={}){
     runScripts:"outside-only"
   });
   const calls=[];
+  dom.window.confirm=()=>true;
   let snapshot=initialSnapshot||{active:false};
   dom.window.__fakeClient={
     auth:{
@@ -115,4 +116,109 @@ test("public: the view updates without a full browser reload",async()=>{
     assert.match(doc.querySelector("#tm-public-content").textContent,/Game started/);
     assert(doc.querySelector("#tm-organizer").hidden);
   }finally{t.close();}
+});
+
+const makeTeams=(count=6)=>Array.from({length:count},(_,i)=>({
+  id:"team"+(i+1),label:"Team "+(i+1),seed:i+1,
+  court:count===6?(i<3?1:2):null,
+  players:[{id:"person"+(i+1),name:"Person "+(i+1)}]
+}));
+const pause=()=>new Promise(resolve=>setTimeout(resolve,35));
+
+test("anonymous visitor can start a ready game and record winner through public RPCs",async()=>{
+  const teams=makeTeams();
+  const base={active:true,session_id:"session",format:6,revision:2,
+    rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams};
+  const t=await boot({initialSnapshot:{...base,games:[{
+    id:"game1",round:1,court:1,status:"ready",
+    team_a_id:"team1",team_b_id:"team2",winner_team_id:null
+  }]}});
+  try{
+    const doc=t.dom.window.document;
+    assert(doc.querySelector('[data-tm-game-action="start"]'));
+    doc.querySelector('[data-tm-game-action="start"]').click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_public_start_game"&&
+      c.args?.p_game_id==="game1"));
+
+    t.setSnapshot({...base,revision:3,games:[{
+      id:"game1",round:1,court:1,status:"playing",
+      team_a_id:"team1",team_b_id:"team2",winner_team_id:null
+    }]});
+    await t.refresh();
+    doc.querySelector('[data-report-winner="game1"]').value="team2";
+    doc.querySelector('[data-tm-game-action="winner"]').click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_public_report_winner"&&
+      c.args?.p_game_id==="game1"&&c.args?.p_winner_team_id==="team2"));
+    assert(t.dom.window.document.querySelector("#tm-organizer").hidden);
+  }finally{t.close();}
+});
+
+test("six-team public view only offers resting-team substitutes on the same court",async()=>{
+  const teams=makeTeams();
+  const t=await boot({initialSnapshot:{
+    active:true,session_id:"session",format:6,revision:2,
+    rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams,
+    games:[{id:"game1",round:1,court:1,status:"ready",
+      team_a_id:"team1",team_b_id:"team2",winner_team_id:null}]
+  }});
+  try{
+    const doc=t.dom.window.document;
+    const select=doc.querySelector('[data-sub-player="game1"]');
+    assert(select);
+    assert.match(select.textContent,/Person 3/);
+    assert(!select.textContent.includes("Person 6"));
+    select.value="person3";
+    doc.querySelector('[data-sub-team="game1"]').value="team1";
+    doc.querySelector('[data-tm-game-action="sub"]').click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_public_record_sub"&&
+      c.args?.p_session_player_id==="person3"&&
+      c.args?.p_target_team_id==="team1"));
+  }finally{t.close();}
+});
+
+test("five-team page exposes rotation-long public transfer and not temporary subs",async()=>{
+  const teams=makeTeams(5);
+  const t=await boot({initialSnapshot:{
+    active:true,session_id:"session",format:5,revision:2,
+    rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams,
+    games:[{id:"game1",round:1,court:1,status:"ready",
+      team_a_id:"team1",team_b_id:"team2",winner_team_id:null}]
+  }});
+  try{
+    const doc=t.dom.window.document;
+    assert(doc.querySelector("#tm-transfer-player"));
+    assert.equal(doc.querySelector('[data-sub-player="game1"]'),null);
+    doc.querySelector("#tm-transfer-player").value="person1";
+    doc.querySelector("#tm-transfer-target").value="team2";
+    doc.querySelector('[data-tm-game-action="transfer"]').click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_public_transfer"&&
+      c.args?.p_rotation_id==="rot"&&c.args?.p_session_player_id==="person1"));
+  }finally{t.close();}
+});
+
+test("organizer has correction control but anonymous visitors do not",async()=>{
+  const teams=makeTeams();
+  const snapshot={active:true,session_id:"session",format:6,revision:3,
+    rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams,
+    games:[{id:"game1",round:1,court:1,status:"completed",
+      team_a_id:"team1",team_b_id:"team2",winner_team_id:"team1"}]};
+  const publicView=await boot({initialSnapshot:snapshot});
+  try{
+    assert.equal(publicView.dom.window.document.querySelector(
+      '[data-tm-game-action="correct-winner"]'),null);
+  }finally{publicView.close();}
+  const admin=await boot({initialSnapshot:snapshot,organizer:true});
+  try{
+    const button=admin.dom.window.document.querySelector(
+      '[data-tm-game-action="correct-winner"]');
+    assert(button,"Organizer correction control is missing");
+    button.click();
+    await pause();
+    assert(admin.calls.some(c=>c.name==="tm_org_correct_winner"&&
+      c.args?.p_winner_team_id==="team2"));
+  }finally{admin.close();}
 });
