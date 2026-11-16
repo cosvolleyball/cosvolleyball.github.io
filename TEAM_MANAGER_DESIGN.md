@@ -114,9 +114,11 @@ All schedule invariants above are covered by the dedicated pure-function test su
 - At end of the session, organizer-only summary reports wins, rotations, regular games and substitute appearances. The public view returns to its inactive state.
 - Session history may remain privately for troubleshooting but never influences future session game totals. Persistent profile attributes survive.
 
-## Supabase architecture proposal (NOT implemented)
+## Supabase architecture — draft implementation, NOT deployed
 
 **Existing observed database:** `public.events` (`id`, `visibility`, `status`), `public.registrations` (`event_id`, `player_name`, `player_email`, `registration_status`, `attendance_status`), and `public.organizers` (`user_id`). All three have RLS enabled. Organizer access is currently represented by a row in `public.organizers`.
+
+A first version of the isolated data model is in `db/drafts/event_day_manager_foundation.sql`. It has been applied successfully against a disposable PostgreSQL 17 test database, **not production**. `db/tests/fixture.sql` and `db/tests/contracts.sql` verify access control, profile and roster import, walk-ins, stats isolation, and deletion independence. The CI workflow is `.github/workflows/team-manager-db-contracts.yml`. This is not a signed-off migration and must not be applied to production before complete backend review.
 
 New isolated data model:
 - Private `team_manager_profiles`: profile ID, normalized unique email, skill/gender/positions, audit timestamps; organizer-only RLS.
@@ -137,8 +139,8 @@ Concurrency: server-side validation and row locking/version checking for every s
 
 ## Implementation order
 
-1. **Foundation (this branch):** inspected schema/site structure; tested pure scheduling invariants for 4/5/6 teams; this living spec. No public link or backend alterations.
-2. **Data contract and security:** design migration with organizer/private/public projections, anonymous action RPC validations, concurrency tests and appropriate local/staging verification. Apply to production only after review and controlled rollout.
+1. **Foundation (this branch):** inspected schema/site structure; tested pure scheduling invariants for 4/5/6 teams and organizer-only draft balancing; this living spec. No public link or production backend alterations.
+2. **Data contract and security:** a first schema/RPC draft is committed and its baseline database contract tests run against PostgreSQL 17 in CI. Next add draft/publish, public action RPC validations, concurrency tests and appropriate staging verification. Apply to production only after review and controlled rollout.
 3. **Organizer experience:** event picker, attendance, persistent profiles, draft team generator, swap/undo, publish.
 4. **Public experience:** public single-active-session view, live court updates, player-reported starts/winners/substitutions, safe correction workflow.
 5. **Unusual attendance and end-to-end QA:** 4v4/5v5/6v6 lineup capacities, player breaks, late/early movement, five-team court transitions, full real-device testing; release only when confirmed.
