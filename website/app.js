@@ -765,6 +765,20 @@ function openEventEditor(event=null){
   $("event-editor-dialog").showModal();
   $("event-title").focus();
 }
+// Duplicate only editable event settings. Never reuse the original event ID,
+// private invitation token, player registrations, or accounting records.
+function openDuplicateEventEditor(source) {
+  if (!isOrganizer || !source) return;
+  editEvent(source);
+  $("edit-id").value = ""; // Submit uses INSERT, not UPDATE.
+  $("event-date").value = ""; // Require the organizer to choose a new date.
+  $("event-status").value = "draft"; // Do not accidentally publish.
+  $("editor-heading").textContent = "Duplicate event";
+  $("event-duplicate-hint").hidden = false;
+  updateEventEndPreview();
+  $("event-editor-dialog").showModal();
+  $("event-date").focus();
+}
 $("create-event").addEventListener("click",()=>openEventEditor());
 $("close-event-editor").addEventListener("click",()=>$("event-editor-dialog").close());
 $("event-editor-dialog").addEventListener("click",event=>{
@@ -786,6 +800,7 @@ function clearEditor(){
   $("event-duration").value="180";
   $("event-duration-custom").value="180";
   $("editor-heading").textContent="Create an event";
+  $("event-duplicate-hint").hidden=true;
   $("event-save-message").textContent="";
   updateEventEndPreview();
 }
@@ -1001,6 +1016,7 @@ async function loadAdminEvents(){
       <p class="muted small">${money(e.price_cents)} per player</p>
       <div class="admin-actions">
         <button class="button secondary" data-edit="${e.id}">Edit event</button>
+        <button class="button secondary" type="button" data-duplicate="${esc(e.id)}" aria-label="Duplicate ${esc(e.title)}">Duplicate event</button>
         <button class="button secondary" data-toggle="${e.id}" data-status="${e.status}">${e.status==="published"?"Unpublish":e.status==="cancelled"?"Reopen as draft":"Publish"}</button>
         ${e.status!=="cancelled"?`<button class="button button-warn" data-cancel-event="${e.id}">Cancel event</button>`:"<span class='cancelled-hint'>Cancelled · registrations retained</span>"}
         <button class="button button-danger-outline" data-delete-event="${e.id}">Delete permanently</button>
@@ -1039,6 +1055,8 @@ async function loadAdminEvents(){
     });
   });
   $("admin-events").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>openEventEditor(shown.find(e=>e.id===b.dataset.edit))));
+  $("admin-events").querySelectorAll("[data-duplicate]").forEach(b=>b.addEventListener("click",()=>
+    openDuplicateEventEditor(shown.find(e=>String(e.id)===b.dataset.duplicate))));
   document.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",async()=>{
     const status=b.dataset.status==="published"?"draft":b.dataset.status==="cancelled"?"draft":"published";
     b.disabled=true;
@@ -1160,6 +1178,7 @@ function editEvent(e){
   $("event-visibility").value=e.visibility||"public";
   $("event-description").value=e.description||"";
   $("editor-heading").textContent="Edit event";
+  $("event-duplicate-hint").hidden=true;
   $("event-save-message").textContent=originalMinute!==roundedMinute
   ? "This event used a non-quarter-hour start. The time picker shows the nearest available quarter-hour; review it before saving."
   : "";
