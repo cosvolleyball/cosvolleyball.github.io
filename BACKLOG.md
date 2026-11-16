@@ -2,9 +2,33 @@
 
 **Last reviewed:** 2026-11-16
 **Project:** [Colorado Springs Pickup Volleyball](https://cosvolleyball.github.io/)  
-**Status:** No urgent development work currently scheduled.
+**Status:** Active improvement batch approved; production remains in maintenance mode until reviewed changes are deployed.
 
 This file is the shared source of truth for planned website work. Keep this list current as features are agreed, started, completed, or explicitly deferred. Do not add private player information, credentials, secret keys, or database exports; this repository is public.
+
+## Approved improvements (2026-11-16)
+
+### 1. Duplicate an existing event — In progress
+- Add an organizer-only "Duplicate event" action to existing events.
+- Copy title, venue, start time, duration, capacity, fee, host, payment instructions, visibility, and description.
+- Require selection of a new date, create a separate draft, and do not copy the event ID, private invitation link, registrations, attendance, or payment records.
+- **Acceptance:** creation uses INSERT, never UPDATE; existing event is unchanged, and the new event has no prior players or payments.
+- **Delivery:** implement and test on a feature branch; review before production merge.
+
+### 2. Add to Calendar — Queued
+- Offer calendar integration for players on event pages and/or confirmation.
+- Include correct start/end time, gym and event information; avoid revealing private invitation or registration-management tokens.
+- **Acceptance:** calendar event is accurate for Mountain Time and remains usable on phones.
+
+### 3. Mobile and accessibility audit — Queued
+- Review public registration, event details, organizer dashboard, dialogs, and check-in on narrow screens.
+- Focus on touch targets, labels, keyboard and screen-reader navigation, contrast, and focus behavior.
+- **Acceptance:** documented findings and tested fixes, without unrelated redesign.
+
+### 4. Expand regression testing — In progress / ongoing
+- Add coverage for event duplication and subsequent calendar changes.
+- Run automated isolated regression tests on pull requests **before** merging as well as on deployments.
+- **Acceptance:** existing tests continue passing, and new functionality has meaningful positive and negative tests.
 
 ## Deferred / low priority
 
