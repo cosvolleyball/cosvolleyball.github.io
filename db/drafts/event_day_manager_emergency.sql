@@ -215,7 +215,7 @@ end $$;
 -- participant without revealing completed-game appearance details publicly.
 create function public.tm_org_game_appearances(p_game_id uuid)
 returns jsonb language plpgsql stable security definer set search_path=''
-as $
+as $$
 declare
   v_result jsonb;
 begin
@@ -235,7 +235,7 @@ begin
   join public.tm_games g on g.id=a.game_id
   where a.game_id=p_game_id and g.status in ('playing','completed');
   return coalesce(v_result,'[]'::jsonb);
-end $;
+end $$;
 
 revoke execute on function public.tm_public_game_lineup(uuid)
   from public,anon,authenticated;
