@@ -1,33 +1,47 @@
-# Release test checklist
+# Website release and maintenance test checklist
 
-Run against your local server **before** uploading to GitHub, then repeat critical checks on `https://cosvolleyball.github.io/`.
+Run the GitHub Actions regression suite first. This checklist is for **targeted manual verification**, because JSDOM tests do not render real phone layouts, native calendar imports, email delivery or Supabase authorization.
 
-## Website checks
+**Safety:** Prefer existing safe/public pages. If a registration or database action needs testing, use a controlled event and an email you own; never alter real players' registrations or financial entries just to test a UI change.
 
-- [ ] Homepage loads; public event cards and event detail pages still work.
-- [ ] Open Incognito: private events are not listed, and organizer tools are not visible.
-- [ ] Log in as organizer: published private events appear on Upcoming Events with **Copy link** (unchanged).
-- [ ] Organizer dashboard (`?dashboard=1`) lists events with **earliest starts first**, public and private.
-- [ ] Dashboard has **View event ↗** instead of Copy event link, opening a new browser tab. Private event opens through its invitation URL.
-- [ ] Create and edit event modals still work; 6 PM, blank date, quarter-hour minutes, three-hour duration remain.
-- [ ] Payment selector offers **Venmo** and **Cash at the gym** only. Other arrangements are coordinated with the host.
+## Deployment and public event pages
 
-## Player and email checks
+- [ ] Newest **Deploy Colorado Springs Pickup Volleyball** Actions run succeeds on `main`.
+- [ ] Homepage loads at https://cosvolleyball.github.io/ and event details show the correct venue, date, local time, capacity and contribution.
+- [ ] Public event URLs (`?event=`) open correctly; private invitations (`?invite=`) work with a valid link and are absent from public lists while logged out.
+- [ ] Public rosters show only player names and registration/waitlist status, never emails or personal management tokens.
+- [ ] Keyboard skip link reaches the correct public content.
 
-- [ ] Register a test player with a real email address you control; check the banner clearly says registered / waitlisted.
-- [ ] Banner says to check email and **Spam/Junk**, and doesn't reveal or provide a copy button for the management token.
-- [ ] Organizer dashboard no longer shows a **Copy manage link** control.
-- [ ] The confirmation email contains the private `?manage=` link.
-- [ ] Opening that emailed `?manage=` link still shows the player's status and allows cancellation.
-- [ ] Cancellation of a confirmed player automatically promotes the next waitlisted player.
-- [ ] Waitlist/promotion/cancellation emails still arrive after the scheduled worker runs; `sent` appears in the queue log when accepted for sending.
-- [ ] Existing historical Apple Cash entries still display accurately to the organizer; do not modify their data.
+## Organizer workflows
 
-## Safety
+- [ ] Organizer login and logout work; private dashboard data does not reappear when navigating back.
+- [ ] Dashboard tabs are keyboard accessible; Left/Right/Home/End switch between Events and Finances.
+- [ ] Create/Edit event preserves the correct default date/time/duration and does not change existing registrations.
+- [ ] **Duplicate Event** opens a new Draft, copies settings but no date, and never edits the original. If testing a save, use a controlled event and delete it only after verifying.
+- [ ] Existing check-in, payments and attendance display correctly on desktop and phones; avoid modifying real records during testing.
+- [ ] Restricted/banned player rules and the event audit history remain organizer-only.
+- [ ] Finance totals, host balances and historical transaction list load; do not create/void real finance entries as a smoke test.
 
-- [ ] No `service_role` key, Gmail token, or `EMAIL_BRIDGE_TOKEN` exists in GitHub files.
-- [ ] The public page never reveals contact details (only player names and waitlist status).
-- [ ] New public event and private invitation links still open correctly from the live domain.
-- [ ] SQL change to registration methods is installed **before** the new site is deployed.
+## Registration, email and calendar
 
-Use test events and addresses you control. Since emails are live, test registrations can send real email messages. Delete temporary events only after checking the results you need.
+- [ ] With a controlled event, a confirmed registration displays the correct status and **Google Calendar** and **Apple/Outlook (.ics)** options.
+- [ ] Google Calendar and imported .ics show the correct Colorado local start/end times and gym. Check DST-sensitive events when relevant.
+- [ ] Waitlisted players do **not** see a calendar button suggesting they have a reserved spot.
+- [ ] Neither calendar choice includes email addresses, payment instructions, `?invite=` tokens or `?manage=` links.
+- [ ] Email confirmation and private registration-management/cancellation links work if doing an authorized controlled end-to-end test.
+- [ ] Event cancellation/waitlist promotion are tested only with controlled events; do not manipulate live players to exercise time-based restrictions.
+
+## Phones, accessibility and readability
+
+- [ ] iPhone Safari (~375px), Android Chrome (~360px), and narrow ~320px width: events, dialogs, calendar buttons and organizer controls fit with no clipped controls.
+- [ ] Check-in form fields and action buttons are large enough to tap without hitting neighbors; mobile check-in table remains understandable.
+- [ ] Registration dialog scrolls while its Close control stays reachable; keyboard and screen-reader users can identify the modal.
+- [ ] Success dialog announces registration/waitlist status and does not trap navigation after dismissal.
+- [ ] At 200% zoom, pages are readable and controls remain available.
+- [ ] When available, verify VoiceOver/TalkBack announces player-specific Cancel actions, the finance Void action and organizer tab selection.
+
+## Security and maintenance
+
+- [ ] No private records, management/invitation URLs, passwords, database credentials or mail-worker tokens are committed.
+- [ ] `BACKLOG.md` is up to date after release sign-off.
+- [ ] If deployment fails, check the **specific failing step** before trying a fresh workflow. Do not rerun old SQL migrations or modify Supabase to fix a GitHub Pages publishing failure.
