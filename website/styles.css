@@ -2973,3 +2973,6 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 650px) {
   .phase9-roster td::before { font-size: 12px; color: #4a6372; }
 }
+
+/* These small on-white labels previously used cyan below 4.5:1 contrast. */
+.signup-dialog-toolbar-label, .form-kicker { color: #006a75; }
