@@ -26,7 +26,7 @@ test("Teams Manager is isolated from existing app.js initialization",()=>{
   assert.deepEqual(scripts,["./teams.mjs"]);
   assert(doc.querySelector('#tm-public'));
   assert(doc.querySelector('#tm-public-content'));
-  assert(doc.querySelector('#tm-status[ ]')===null); // status tag is a normal element
+  assert(doc.querySelector('#tm-status'));
   assert(doc.querySelector('#tm-organizer[hidden]'));
   assert(doc.querySelector('#tm-org-active[hidden]'));
   assert(doc.querySelector('#tm-org-empty'));
