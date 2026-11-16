@@ -141,6 +141,58 @@ function validate(players, options) {
   }
 }
 
+
+function historyMap(options) {
+  const pairHistory = new Map();
+  for (const entry of options.priorTeammates || []) {
+    if (!Array.isArray(entry) || entry.length < 2) {
+      throw new TypeError("Prior teammate history must contain pairs of IDs.");
+    }
+    const [a, b, count = 1] = entry;
+    if (a === b || !Number.isInteger(count) || count < 0) {
+      throw new RangeError("Invalid prior teammate pair.");
+    }
+    const key = pairKey(a, b);
+    pairHistory.set(key, (pairHistory.get(key) || 0) + count);
+  }
+  return pairHistory;
+}
+
+/**
+ * Compare a manually edited preview against its generated baseline.
+ * Lower scores represent better balance under the selected toggles.
+ * Validates the complete assignment before returning a quality score.
+ */
+export function scoreBalancedDraft(players, draftTeams, options) {
+  if (!options || !Array.isArray(draftTeams))
+    throw new TypeError("Draft teams and balancing settings are required.");
+  validate(players, options);
+  if (draftTeams.length !== options.teamCount)
+    throw new RangeError("Draft team count does not match settings.");
+  const lookup = new Map(players.map(p=>[p.id,p]));
+  const seen = new Set();
+  const minimum = options.teamCount===6 ? 4 : options.format;
+  const ordered = [...draftTeams].sort((a,b)=>a.seed-b.seed);
+  if(ordered.some((team,i)=>team.seed!==i+1 ||
+      !Array.isArray(team.playerIds) || team.playerIds.length<minimum))
+    throw new RangeError("Every team needs a valid seed and playable roster.");
+  const teams = ordered.map(team=>team.playerIds.map(id=>{
+    if(!lookup.has(id) || seen.has(id))
+      throw new RangeError("Draft contains an unknown or duplicate player.");
+    seen.add(id);
+    return lookup.get(id);
+  }));
+  if(seen.size!==players.length)
+    throw new RangeError("Draft must assign every available player exactly once.");
+  const cfg = {
+    teamCount:options.teamCount,
+    balanceSkill:options.balanceSkill!==false,
+    balanceGender:options.balanceGender===true,
+    balancePositions:options.balancePositions===true&&options.format!==4
+  };
+  return Number(scoreTeams(teams,cfg,historyMap(options)).toFixed(5));
+}
+
 /**
  * @param {Array<{id:string,skill?:number|null,gender?:string|null,positions?:string[],regularGames?:number}>} players
  * @param {{teamCount:4|5|6,format:4|5|6,balanceSkill?:boolean,balanceGender?:boolean,balancePositions?:boolean,
@@ -164,18 +216,7 @@ export function generateBalancedTeams(players, options) {
     throw new RangeError("Invalid search budget.");
   }
 
-  const pairHistory = new Map();
-  for (const entry of options.priorTeammates || []) {
-    if (!Array.isArray(entry) || entry.length < 2) {
-      throw new TypeError("Prior teammate history must contain pairs of IDs.");
-    }
-    const [a, b, count = 1] = entry;
-    if (a === b || !Number.isInteger(count) || count < 0) {
-      throw new RangeError("Invalid prior teammate pair.");
-    }
-    const key = pairKey(a, b);
-    pairHistory.set(key, (pairHistory.get(key) || 0) + count);
-  }
+  const pairHistory = historyMap(options);
 
   // With n players across k teams, rosters differ in size by at most 1.
   const base = Math.floor(players.length / cfg.teamCount);
