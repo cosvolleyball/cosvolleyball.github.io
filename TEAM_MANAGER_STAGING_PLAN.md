@@ -2,9 +2,11 @@
 
 **Status:** Preparation only. This file does NOT authorize creating a project, applying SQL to production, deploying the frontend, or merging draft PR #6.
 
-## Approval requirement
+## No third hosted project — Free plan constraint
 
-A new hosted Supabase project may incur usage or billing. Obtain explicit approval from the owner before creating one. Never use a raw production database copy in staging, and never export real registered-player emails, payments, finance records, organizer credentials, or other sensitive production data into test systems.
+The owner uses **both free Supabase project slots** for Colorado Springs Pickup Volleyball and Tournament Builder. **Do not create, pause, transfer, replace, or upgrade either project for Teams Manager testing.** Supabase's two-active-free-project limit is account-wide for owners/admins.
+
+Use the **local Supabase CLI stack with Docker** (or an ephemeral isolated runner) as staging. It runs local Postgres, Auth, PostgREST and Realtime without consuming a hosted Supabase project slot or modifying the existing two projects. Keep the manager's connection pointed exclusively at local or temporary test infrastructure. Never export real registered-player emails, payments, finance records, organizer credentials or other sensitive production data into tests.
 
 ## Why dedicated staging matters
 
@@ -12,11 +14,11 @@ The automated SQL tests use disposable PostgreSQL 17 with a deliberately reduced
 
 The current live website and Supabase project must stay unchanged.
 
-## Staging setup after approval
+## Local staging setup — no new Supabase account/project
 
-1. Create a separate Supabase project with synthetic events, player profiles, registration and organizer data; do not enable outbound email, payments, scheduled jobs or webhooks.
-2. Recreate only the minimum necessary existing project tables/roles, using dummy account emails. Do not point the staging site at the production database.
-3. Review these SQL drafts and their dependencies in order before applying anything to staging:
+1. Use the current Supabase CLI and a Docker-compatible container runtime in a **separate, unlinked** local checkout or GitHub Actions test workspace. Review command arguments with the then-current CLI help. Run `supabase init` and `supabase start` locally (or `npx supabase init` / `npx supabase start` when installed as a dev dependency). **Never run `supabase link`, `db push --remote`, `db reset --linked`, or any remote mutation command.**
+2. Create only synthetic events, registrations, organizer accounts and profiles. Do not enable outbound emails, payments, reminders, scheduled jobs or webhooks. The existing fixture is a simplified Postgres model; rebuild the relevant schema with real local Supabase Auth/PostgREST functionality.
+3. Review these SQL drafts and their dependencies in order before applying anything to the **local** database:
    - db/drafts/event_day_manager_foundation.sql
    - db/drafts/event_day_manager_rotations.sql
    - db/drafts/event_day_manager_game_actions.sql
@@ -27,9 +29,9 @@ The current live website and Supabase project must stay unchanged.
    - db/drafts/event_day_manager_intra_team_rotation.sql
    - db/drafts/event_day_manager_realtime.sql
 4. Validate actual Auth/JWT roles, RLS rules, SECURITY DEFINER grants and PostgREST exposure; run current Supabase security/performance advisors and fix relevant findings.
-5. Use a separate static preview from this branch, not the production Pages site. A nonproduction hostname intentionally refuses a connection unless the page sets window.TEAMS_MANAGER_STAGING_CONFIG with the **staging URL and staging publishable key only**, before teams.mjs loads. Never use a service_role or secret key in client code.
+5. Serve a temporary preview from the feature branch pointing only to the locally running Supabase services. A nonproduction hostname refuses a connection unless `window.TEAMS_MANAGER_STAGING_CONFIG` contains the **local API URL and local publishable/anon key**, set before teams.mjs loads. The local credentials are emitted by `supabase status`. Never use a service_role or secret key in client code, and never point previews at either hosted production project. If the local site is accessed from a phone, use an isolated trusted network or port-forwarding arrangement and do not expose the local Supabase stack publicly.
 6. Exercise the manager with two browser sessions (one authorized organizer, one anonymous), then simultaneous anonymous clients on distinct devices. Verify real Broadcast delivery, reconnection and the polling fallback.
-7. Only after staging success, prepare a clean migration with the then-current Supabase CLI workflow and review a backup/rollback plan. Explicit approval is needed before production migration or merging the PR.
+7. After local Supabase integration testing, prepare a clean migration using the then-current CLI workflow and review a backup/rollback plan. Optional later hosted integration testing would require a separate explicit decision; **no third hosted project or paid upgrade is presumed**. Production migration and merging the PR still require explicit approval.
 
 ## Functional acceptance matrix
 
@@ -70,7 +72,7 @@ The current live website and Supabase project must stay unchanged.
 
 ## Release blockers
 
-1. Approval for a dedicated Supabase staging project or identification of a suitably isolated staging project.
-2. Real Supabase JWT/RLS/PostgREST/Broadcast and mobile-device verification.
+1. Real local Supabase JWT/RLS/PostgREST/Broadcast integration testing against a completely isolated CLI/Docker stack; no third hosted project needed.
+2. Mobile-device verification on an appropriately isolated test network, without connecting previews to production.
 3. Deliberate testing of abuse/rate-limit recovery for public no-login actions.
 4. Independent code review, clean migration/rollback documentation, then explicit production deployment approval.
