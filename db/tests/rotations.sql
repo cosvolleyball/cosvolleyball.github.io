@@ -6,6 +6,7 @@ declare
   v_draft uuid;
   v_new_draft uuid;
   v_published uuid;
+  v_player uuid;
   v_payload jsonb;
   v_members jsonb;
   v_count integer;
@@ -65,6 +66,19 @@ begin
      or exists(select 1 from public.tm_rotations where id=v_draft) then
     raise exception 'Regenerate failed to replace prior private draft';
   end if;
+
+  -- Attendance changes invalidate a saved draft, even if the organizer
+  -- refreshed the revision number. A player on break cannot be published.
+  select session_player_id into v_player from public.tm_memberships
+    where rotation_id=v_new_draft limit 1;
+  perform public.tm_org_set_attendance(v_player,'break');
+  begin
+    perform public.tm_org_publish_draft(v_session,
+      (select revision from public.tm_sessions where id=v_session));
+    raise exception 'Unwilling/unavailable player was published';
+  exception when sqlstate '22023' then null;
+  end;
+  perform public.tm_org_set_attendance(v_player,'present');
 
   begin
     perform public.tm_org_publish_draft(v_session,v_revision);
