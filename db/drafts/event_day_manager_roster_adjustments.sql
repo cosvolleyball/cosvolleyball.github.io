@@ -15,6 +15,7 @@ declare
   v_in_status text;
   v_out_status text;
   v_total_count integer;
+  v_format smallint;
 begin
   if auth.uid() is null or not exists (
     select 1 from public.organizers where user_id=auth.uid()
@@ -30,6 +31,8 @@ begin
     raise exception 'Only an active published rotation can be adjusted'
       using errcode='22023';
   end if;
+  select playing_format into v_format from public.tm_rotations
+    where id=p_rotation_id;
   if not exists(
     select 1 from public.tm_teams
     where id=p_team_id and rotation_id=p_rotation_id
@@ -74,7 +77,7 @@ begin
     select count(*) into v_total_count
     from public.tm_memberships
     where rotation_id=p_rotation_id and team_id=p_team_id;
-    if v_total_count>=v_session.format then
+    if v_total_count>=v_format then
       raise exception 'Team has no unoccupied roster spot; select an unavailable member'
         using errcode='22023';
     end if;
