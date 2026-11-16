@@ -371,6 +371,20 @@ begin
       using errcode='22023';
   end if;
 
+  -- A six-team opening-winner correction can change which team is
+  -- resting in its next game. Remove planned subs for that court before
+  -- rewiring, or a former resting-team player could end up playing both.
+  -- Five-team games never have temporary substitutes.
+  if v_game.round_number=1 and v_team_count=6 then
+    delete from public.tm_game_subs subs
+    using public.tm_games dependent
+    where subs.game_id=dependent.id
+      and dependent.rotation_id=v_rotation
+      and dependent.court=v_game.court
+      and dependent.round_number>1
+      and dependent.status in ('scheduled','ready');
+  end if;
+
   update public.tm_games set winner_team_id=p_winner_team_id
     where id=p_game_id;
   update public.tm_sessions set revision=revision+1 where id=v_session;
