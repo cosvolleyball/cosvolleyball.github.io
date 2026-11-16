@@ -140,9 +140,9 @@ Concurrency: server-side validation and row locking/version checking for every s
 ## Implementation order
 
 1. **Foundation (this branch):** inspected schema/site structure; tested pure scheduling invariants for 4/5/6 teams and organizer-only draft balancing; this living spec. No public link or production backend alterations.
-2. **Data contract and security:** a first schema/RPC draft is committed and its baseline database contract tests run against PostgreSQL 17 in CI. Next add draft/publish, public action RPC validations, concurrency tests and appropriate staging verification. Apply to production only after review and controlled rollout.
-3. **Organizer experience:** event picker, attendance, persistent profiles, draft team generator, swap/undo, publish.
-4. **Public experience:** public single-active-session view, live court updates, player-reported starts/winners/substitutions, safe correction workflow.
+2. **Data contract and security:** foundation plus organizer draft/publish SQL review drafts are committed in `db/drafts/` and integrated against PostgreSQL 17 fixtures in CI. Still outstanding: the public game-action RPCs, concurrency tests, true Supabase staging/RLS verification, and migration review. **Nothing has been applied to production.**
+3. **Organizer experience (initial implementation):** the new isolated `website/teams/` page includes an event picker, attendance, walk-ins, profile editing, local draft generation/regeneration, swaps, moves, undo, private draft saving, explicit publish, early rotation closing and private session statistics. It is not production-tested and is not deployed.
+4. **Public experience (partial):** same-site navigation now links to the new Teams Manager; it renders sanitized active-session teams/courts and refreshes on an 8-second interval without page reload. Next implement fully validated anonymous start/winner/substitute actions, result correction, match-dependent scheduling, and low-latency realtime notifications.
 5. **Unusual attendance and end-to-end QA:** 4v4/5v5/6v6 lineup capacities, player breaks, late/early movement, five-team court transitions, full real-device testing; release only when confirmed.
 
 ## Decisions still requiring validation before live release
