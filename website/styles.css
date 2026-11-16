@@ -2878,3 +2878,71 @@ body.organizer-view .site-nav .nav-organizer {
   .registration-calendar-actions { flex-direction: column; }
   .registration-calendar-actions > .button { flex: none; width: 100%; }
 }
+
+/* Phase 11 accessibility/mobile corrections. Keyboard skip links remain
+   visually hidden until focused, including the separate organizer view. */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  background: #072b44;
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 800;
+  transform: translateY(-160%);
+  text-decoration: none;
+}
+.skip-link:focus-visible { transform: translateY(0); }
+.skip-organizer { display: none; }
+body.organizer-view .skip-public { display: none; }
+body.organizer-view .skip-organizer { display: block; }
+
+/* Visible focus is important for keyboard and external-switch navigation. */
+.signup-dialog-toolbar .close:focus-visible,
+.admin-event-collapse-summary:focus-visible,
+.phase9-table-scroll:focus-visible,
+.finance-table-wrap:focus-visible,
+.phase10-table-scroll:focus-visible {
+  outline: 3px solid #075c77;
+  outline-offset: 2px;
+}
+
+/* The existing input: focus selector was invalid CSS; focus-visible still
+   applies for keyboard users while this covers pointer/touch focus as well. */
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid #087484;
+  outline-offset: 2px;
+}
+.editor-aside { color: #526978; }
+.phase9-roster .phase9-updated { color: #495f6e; font-size: 12px; }
+
+/* Make check-in actions comfortable to tap, including on a small screen. */
+.phase9-roster-toolbar .button,
+.admin-event .admin-actions .button,
+.admin-event .phase9-roster td .button,
+.phase9-roster td select,
+.phase10-table .button,
+.finance-void-button,
+.signup-dialog-toolbar .close {
+  min-height: 44px;
+}
+@media (max-width: 650px) {
+  /* 16px form controls prevent unwanted input-zoom on iOS Safari. */
+  input, select, textarea,
+  .finance-form input, .finance-form select, .finance-form textarea,
+  .phase10-access-form input, .phase10-access-form select,
+  .phase10-access-form textarea, .admin-event .phase9-roster td select {
+    font-size: 16px;
+    min-height: 44px;
+  }
+  .admin-event .phase9-roster td select { padding: 9px 8px; }
+  .phase9-roster-toolbar .button,
+  .admin-event .admin-actions .button { font-size: 14px; }
+  .phase9-roster td.phase9-player-cell strong { font-size: 15px; }
+  .signup-dialog-toolbar .close { width: 44px; height: 44px; }
+  .dashboard-tab { min-height: 44px; }
+  .admin-event .phase9-roster tr { overflow: visible; }
+}
