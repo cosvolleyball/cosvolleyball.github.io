@@ -321,6 +321,46 @@ begin
       'from_team_id',v_from_team,'to_team_id',p_to_team_id));
 end $;
 
+-- The organizer correction UI needs the set of previously transferred
+-- players; anonymous visitors cannot retrieve this operational history.
+create function public.tm_org_transfers(p_rotation_id uuid)
+returns jsonb language plpgsql stable security definer set search_path=''
+as $
+declare
+  v_result jsonb;
+begin
+  if auth.uid() is null or not exists(
+    select 1 from public.organizers where user_id=auth.uid()
+  ) then
+    raise exception 'Organizer access required' using errcode='42501';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'player_id',history.session_player_id,
+    'name',sp.display_name,
+    'current_team_id',m.team_id,
+    'previous_team_id',history.from_team_id
+  ) order by sp.display_name,history.session_player_id),'[]'::jsonb)
+  into v_result
+  from (
+    select distinct on (t.session_player_id)
+      t.session_player_id,t.from_team_id
+    from public.tm_transfers t
+    where t.rotation_id=p_rotation_id
+    order by t.session_player_id,t.id desc
+  ) history
+  join public.tm_memberships m
+    on m.rotation_id=p_rotation_id
+    and m.session_player_id=history.session_player_id
+  join public.tm_session_players sp
+    on sp.id=history.session_player_id;
+  return coalesce(v_result,'[]'::jsonb);
+end $;
+
+revoke execute on function public.tm_org_transfers(uuid)
+  from public,anon,authenticated;
+grant execute on function public.tm_org_transfers(uuid)
+  to authenticated;
+
 revoke execute on function public.tm_org_correct_transfer(uuid,uuid,uuid)
   from public,anon,authenticated;
 grant execute on function public.tm_org_correct_transfer(uuid,uuid,uuid)
