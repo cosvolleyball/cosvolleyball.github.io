@@ -55,3 +55,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/contracts.sql
       - name: Verify private drafts, explicit publication and early rotation ending
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/rotations.sql
+      - name: Apply public game action RPCs in disposable database ONLY
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_game_actions.sql
+      - name: Test public starts, winners, cross-court dependencies and corrections
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/games.sql
