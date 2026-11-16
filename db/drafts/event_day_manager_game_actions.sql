@@ -211,7 +211,7 @@ begin
   foreach v_team in array array[v_game.team_a_id,v_game.team_b_id] loop
     select count(*) into v_sub_count from public.tm_game_subs
       where game_id=p_game_id and target_team_id=v_team;
-    v_regular_limit := greatest(v_session.format-v_sub_count,0);
+    v_regular_limit := greatest(v_format-v_sub_count,0);
     insert into public.tm_game_appearances
       (game_id,rotation_id,session_id,session_player_id,team_id,is_substitute)
     select p_game_id,v_game.rotation_id,v_session.id,ranked.player_id,v_team,false
