@@ -82,7 +82,8 @@ begin
   begin
     perform public.tm_public_record_sub(v_game,v_sub,v_team1);
     raise exception 'Duplicate substitute assignment accepted';
-  exception when unique_violation then null;
+  exception when sqlstate '22023' then null;
+             when unique_violation then null;
   end;
   perform public.tm_public_cancel_sub(v_game,v_sub);
   if jsonb_array_length(public.tm_public_game_subs(v_game))<>0 then
