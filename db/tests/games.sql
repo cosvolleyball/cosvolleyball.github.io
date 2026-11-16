@@ -41,7 +41,8 @@ begin
     v_format := case when v_team_count=4 then 4::smallint
                      when v_team_count=5 then 5::smallint
                      else 6::smallint end;
-    v_roster_count:=v_team_count*v_format;
+    v_roster_count:=case when v_team_count=4 then 24
+      else v_team_count*v_format end;
     v_session := public.tm_org_start_session(
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',v_format,
       true,false,false);
@@ -56,7 +57,8 @@ begin
       from (
         select id from public.tm_session_players
         where session_id=v_session order by id
-        limit v_format offset (v_index-1)*v_format
+        limit (v_roster_count/v_team_count)
+        offset (v_index-1)*(v_roster_count/v_team_count)
       ) q;
       v_payload := v_payload || jsonb_build_array(
         jsonb_build_object('seed',v_index,'playerIds',v_members)
