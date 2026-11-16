@@ -374,8 +374,24 @@ async function refresh(forcePrivate = false) {
   state.refreshing=true;
   try {
     const snapshot = await rpc("tm_public_snapshot");
+    if (snapshot?.active && snapshot.rotation_status === "published" &&
+        snapshot.teams?.length === 6) {
+      const ready = (snapshot.games||[]).filter(g=>g.status==="ready");
+      const rows = await Promise.all(ready.map(async g=>({
+        id:g.id, subs:await rpc("tm_public_game_subs",{p_game_id:g.id})
+      })));
+      snapshot.pendingSubs = Object.fromEntries(
+        rows.map(row=>[row.id,Array.isArray(row.subs)?row.subs:[]])
+      );
+    }
+    // Avoid resetting a user's form selections on every automatic poll.
+    const before = state.snapshot;
+    const changes = !before || before.active !== snapshot?.active ||
+      before.session_id !== snapshot?.session_id ||
+      before.rotation_id !== snapshot?.rotation_id ||
+      before.revision !== snapshot?.revision;
     state.snapshot = snapshot;
-    renderPublic();
+    if(changes)renderPublic();
     if(state.isOrganizer){
       if(snapshot?.active && (forcePrivate ||
          state.lastPrivateRevision!==snapshot.revision ||
@@ -407,6 +423,88 @@ async function checkOrganizer() {
   state.events=events||[];
   renderEventPicker();
 }
+
+// Anonymous player operations never require an account; every RPC enforces
+// team/rotation eligibility and atomically rejects stale or competing actions.
+$("tm-public-content").addEventListener("click",e=>{
+  const btn=e.target.closest("[data-tm-game-action]");
+  if(!btn)return;
+  void action(async()=>{
+    const name=btn.dataset.tmGameAction;
+    const gameId=btn.dataset.gameId;
+    const games=state.snapshot?.games || [];
+    const teams=state.snapshot?.teams || [];
+    const game=games.find(g=>g.id===gameId);
+    if(name==="start"){
+      if(!game || game.status!=="ready")throw new Error("Game is no longer ready.");
+      if(!window.confirm("Start "+teamName(teams,game.team_a_id)+
+         " vs "+teamName(teams,game.team_b_id)+"?"))return;
+      await rpc("tm_public_start_game",{p_game_id:gameId});
+      feedback("Game started.");
+    }else if(name==="winner"){
+      if(!game || game.status!=="playing")throw new Error("Game is no longer in progress.");
+      const selected=document.querySelector('[data-report-winner="'+gameId+'"]')?.value;
+      if(!selected || ![game.team_a_id,game.team_b_id].includes(selected)){
+        throw new Error("Choose the winning team.");
+      }
+      if(!window.confirm("Confirm "+teamName(teams,selected)+" won this game?"+
+          " This cannot be changed by players afterward."))return;
+      await rpc("tm_public_report_winner",{
+        p_game_id:gameId,p_winner_team_id:selected
+      });
+      feedback("Winner recorded. The schedule has been updated.");
+    }else if(name==="correct-winner"){
+      if(!state.isOrganizer)throw new Error("Organizer access required.");
+      const selected=btn.dataset.winnerId;
+      if(!game || game.status!=="completed" ||
+          ![game.team_a_id,game.team_b_id].includes(selected))
+        throw new Error("Only completed games can be corrected.");
+      if(!window.confirm("Change the winner to "+teamName(teams,selected)+"?"+
+          " This may update subsequent matchups."))return;
+      await rpc("tm_org_correct_winner",{
+        p_game_id:gameId,p_winner_team_id:selected
+      });
+      feedback("Winner corrected.");
+    }else if(name==="sub"){
+      if(!game || game.status!=="ready")throw new Error("Game is not ready.");
+      const player=document.querySelector('[data-sub-player="'+gameId+'"]')?.value;
+      const target=document.querySelector('[data-sub-team="'+gameId+'"]')?.value;
+      if(!player||!target)throw new Error("Choose a substitute and a playing team.");
+      if(!window.confirm("Record a voluntary substitute for "+
+          teamName(teams,target)+" in this game only?"))return;
+      await rpc("tm_public_record_sub",{
+        p_game_id:gameId,p_session_player_id:player,p_target_team_id:target
+      });
+      feedback("One-game substitute recorded.");
+    }else if(name==="cancel-sub"){
+      const player=btn.dataset.playerId;
+      if(!game || game.status!=="ready" || !player)
+        throw new Error("This substitute can no longer be removed.");
+      if(!window.confirm("Remove this planned substitute?"))return;
+      await rpc("tm_public_cancel_sub",{
+        p_game_id:gameId,p_session_player_id:player
+      });
+      feedback("Planned substitute removed.");
+    }else if(name==="transfer"){
+      if(state.snapshot?.teams?.length!==5 ||
+          state.snapshot.rotation_status!=="published")
+        throw new Error("Five-team transfers only during a published rotation.");
+      const player=$("tm-transfer-player")?.value;
+      const toTeam=$("tm-transfer-target")?.value;
+      if(!player||!toTeam)throw new Error("Choose a player and their new team.");
+      if(!window.confirm("Transfer this player to "+teamName(teams,toTeam)+
+          " until the next reshuffle? Teams must agree and neither can be playing."))return;
+      await rpc("tm_public_transfer",{
+        p_rotation_id:state.snapshot.rotation_id,
+        p_session_player_id:player,p_to_team_id:toTeam
+      });
+      feedback("Player transferred for the remainder of this rotation.");
+    }else{
+      return;
+    }
+    await refresh(true);
+  });
+});
 
 $("tm-source-event").addEventListener("change",constrainFormat);
 $("tm-format").addEventListener("change",constrainFormat);
