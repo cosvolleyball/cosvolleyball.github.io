@@ -21,6 +21,8 @@ const state = {
   lastPrivateRevision: null,
   lastPrivateSessionId: null,
   adjustRenderKey: null,
+  appearanceRenderKey: null,
+  correctionAppearances: [],
   refreshing: false
 };
 const statuses = ["candidate", "present", "waiting", "break", "departed"];
@@ -429,6 +431,67 @@ function renderRosterAdjust() {
   $("tm-assign-arrival").disabled=!unassigned.length;
 }
 
+function updateCorrectionCandidateOptions() {
+  const wrongId=$("tm-incorrect-player").value;
+  const old=state.correctionAppearances.find(p=>p.player_id===wrongId);
+  const game=(state.snapshot?.games||[]).find(g=>
+    g.id===$("tm-correct-game").value);
+  const teamList=state.snapshot?.teams||[];
+  const team=old && (old.is_substitute
+    ? teamList.find(t=>t.court===game?.court &&
+        t.id!==game?.team_a_id && t.id!==game?.team_b_id)
+    : teamList.find(t=>t.id===old.team_id));
+  const recorded=new Set(state.correctionAppearances.map(p=>p.player_id));
+  const choices=(team?.players||[]).filter(p=>!recorded.has(p.id));
+  $("tm-correct-player").innerHTML='<option value="">Choose replacement…</option>'+
+    choices.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
+}
+async function loadCorrectionGame() {
+  const id=$("tm-correct-game").value;
+  $("tm-incorrect-player").innerHTML='<option value="">Choose recorded player…</option>';
+  $("tm-correct-player").innerHTML='<option value="">Choose replacement…</option>';
+  state.correctionAppearances=[];
+  if(!id)return;
+  const current=await rpc("tm_org_game_appearances",{p_game_id:id});
+  if($("tm-correct-game").value!==id)return;
+  state.correctionAppearances=Array.isArray(current)?current:[];
+  $("tm-incorrect-player").innerHTML='<option value="">Choose recorded player…</option>'+
+    state.correctionAppearances.map(p=>`<option value="${escapeHtml(p.player_id)}">
+      ${escapeHtml(p.name)} — ${escapeHtml(teamName(state.snapshot?.teams||[],p.team_id))}
+      ${p.is_substitute?"(substitute)":""}
+    </option>`).join("");
+}
+function renderAppearanceCorrection() {
+  const panel=$("tm-appearance-correction");
+  const snapshot=state.snapshot;
+  const matches=(snapshot?.games||[]).filter(g=>
+    ["playing","completed"].includes(g.status));
+  const visible=Boolean(snapshot?.active&&state.isOrganizer&&matches.length);
+  panel.hidden=!visible;
+  if(!visible){
+    state.appearanceRenderKey=null;
+    return;
+  }
+  const key=snapshot.session_id+":"+snapshot.revision;
+  if(state.appearanceRenderKey===key)return;
+  state.appearanceRenderKey=key;
+  const selected=$("tm-correct-game").value;
+  $("tm-correct-game").innerHTML='<option value="">Choose game…</option>'+
+    matches.map(g=>`<option value="${escapeHtml(g.id)}">
+      Court ${g.court}, game ${g.round} — ${escapeHtml(
+        teamName(snapshot.teams||[],g.team_a_id))} vs ${escapeHtml(
+        teamName(snapshot.teams||[],g.team_b_id))}
+    </option>`).join("");
+  if(matches.some(g=>g.id===selected)){
+    $("tm-correct-game").value=selected;
+    void action(loadCorrectionGame);
+  }else{
+    state.correctionAppearances=[];
+    $("tm-incorrect-player").innerHTML='<option value="">Choose recorded player…</option>';
+    $("tm-correct-player").innerHTML='<option value="">Choose replacement…</option>';
+  }
+}
+
 function renderOrganizer() {
   if(!state.isOrganizer)return;
   const active=Boolean(state.snapshot?.active);
@@ -447,6 +510,7 @@ function renderOrganizer() {
   $("tm-end-rotation").textContent=allComplete?"Complete rotation":"End rotation early";
   renderDraft();
   renderRosterAdjust();
+  renderAppearanceCorrection();
 }
 async function loadPrivate() {
   const session=state.snapshot?.session_id;
@@ -657,6 +721,21 @@ $("tm-walkin-form").addEventListener("submit",e=>{e.preventDefault();void action
   feedback("Walk-in added and checked in.");
   await refresh(true);
 });});
+$("tm-correct-game").addEventListener("change",()=>void action(loadCorrectionGame));
+$("tm-incorrect-player").addEventListener("change",updateCorrectionCandidateOptions);
+$("tm-correct-appearance-save").addEventListener("click",()=>void action(async()=>{
+  const gameId=$("tm-correct-game").value;
+  const wrong=$("tm-incorrect-player").value;
+  const correct=$("tm-correct-player").value;
+  if(!gameId||!wrong||!correct)
+    throw new Error("Choose a game, incorrect participant and replacement.");
+  if(!window.confirm("Correct this player's recorded game appearance?"))return;
+  await rpc("tm_org_correct_appearance",{
+    p_game_id:gameId,p_wrong_player_id:wrong,p_correct_player_id:correct
+  });
+  feedback("Game participant record corrected. Organizer statistics are updated.");
+  await refresh(true);
+}));
 $("tm-arrival-team").addEventListener("change",updateReplacementOptions);
 $("tm-assign-arrival").addEventListener("click",()=>void action(async()=>{
   if(!state.snapshot?.active||state.snapshot.rotation_status!=="published")
