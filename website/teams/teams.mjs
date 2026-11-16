@@ -25,7 +25,9 @@ const state = {
   appearanceRenderKey: null,
   choicesKey: null,
   correctionAppearances: [],
-  refreshing: false
+  refreshing: false,
+  pendingRefresh: false,
+  pendingForcePrivate: false
 };
 const statuses = ["candidate", "present", "waiting", "break", "departed"];
 const readableStatus = s => ({candidate:"Not checked in",present:"Present",
@@ -631,7 +633,13 @@ async function loadPrivate() {
   renderOrganizer();
 }
 async function refresh(forcePrivate = false) {
-  if(state.refreshing)return;
+  // If a broadcast arrives during a network request, guarantee a second
+  // server read rather than silently discarding the newest revision.
+  if(state.refreshing){
+    state.pendingRefresh=true;
+    state.pendingForcePrivate ||= forcePrivate;
+    return;
+  }
   state.refreshing=true;
   try {
     const snapshot = await rpc("tm_public_snapshot");
@@ -675,7 +683,15 @@ async function refresh(forcePrivate = false) {
     $("tm-status").className="tm-status is-offline";
     $("tm-public-content").innerHTML =
       '<div class="tm-empty">Teams Manager is temporarily unavailable. Other site features are unaffected.</div>';
-  } finally {state.refreshing=false;}
+  } finally {
+    state.refreshing=false;
+    if(state.pendingRefresh){
+      const pendingPrivate=state.pendingForcePrivate;
+      state.pendingRefresh=false;
+      state.pendingForcePrivate=false;
+      void refresh(pendingPrivate);
+    }
+  }
 }
 async function checkOrganizer() {
   const {data,error}=await supabase.auth.getUser();
@@ -1003,14 +1019,59 @@ $("tm-end-session").addEventListener("click",()=>void action(async()=>{
   feedback("Session ended. Organizer statistics are shown below.");
   await refresh(true);
 }));
+// Database-triggered Broadcast messages carry only revision and active flag.
+// We NEVER render the untrusted broadcast payload; always fetch the
+// server-sanitized tm_public_snapshot(). Rate-limit malicious/noisy
+// notifications to at most one refresh per 1.2 seconds.
+let publicChangesChannel=null;
+let realtimeRefreshTimer=null;
+let lastRealtimeRefreshAt=0;
+function scheduleRealtimeRefresh() {
+  if(document.hidden || realtimeRefreshTimer!==null)return;
+  const delay=Math.max(200,1200-(Date.now()-lastRealtimeRefreshAt));
+  realtimeRefreshTimer=setTimeout(()=>{
+    realtimeRefreshTimer=null;
+    lastRealtimeRefreshAt=Date.now();
+    void refresh();
+  },delay);
+}
+function connectRealtime() {
+  try {
+    publicChangesChannel=supabase
+      .channel("teams-manager:public",{config:{private:false}})
+      .on("broadcast",{event:"changed"},()=>{
+        scheduleRealtimeRefresh();
+      })
+      .subscribe(status=>{
+        // Catch anything that changed between our initial snapshot request
+        // and joining the channel. Failures fall back to periodic polling.
+        if(status==="SUBSCRIBED")scheduleRealtimeRefresh();
+        if(["CHANNEL_ERROR","TIMED_OUT"].includes(status)){
+          console.warn("Teams Manager live connection interrupted; polling remains enabled");
+        }
+      });
+  } catch(err) {
+    console.warn("Teams Manager live connection unavailable; polling remains enabled",err);
+  }
+}
 (async()=>{
   try {
     await checkOrganizer();
     await refresh(true);
+    connectRealtime();
   } catch(e) {
     console.error("Teams Manager initialization error",e);
     feedback("Teams Manager could not initialize.",true);
   }
 })();
+// Recovery fallback: a lost WebSocket, suspended mobile tab or missed event
+// must never leave the court schedule stale indefinitely.
 setInterval(()=>{if(!document.hidden)void refresh();},8000);
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)void refresh();});
+document.addEventListener("visibilitychange",()=>{
+  if(!document.hidden)void refresh();
+});
+window.addEventListener("pagehide",()=>{
+  if(realtimeRefreshTimer!==null)clearTimeout(realtimeRefreshTimer);
+  realtimeRefreshTimer=null;
+  if(publicChangesChannel)void supabase.removeChannel(publicChangesChannel);
+});
