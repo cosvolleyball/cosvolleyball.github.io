@@ -30,7 +30,7 @@
 - Do not require every roster to be divisible by the number of on-court positions. Distribute all present, available players into team rosters when feasible.
 - A roster may contain one or more extra players (e.g., five-person roster in a 4v4 match); the **actual lineup for each match** determines who played. Between-match lineup rotation must give extra roster members opportunities without midgame forced swaps.
 - Organizers may override the recommended distribution and court assignments before publication.
-- Once published, teams stay fixed until the rotation finishes or organizer ends it early. Explicit departure/replacement/substitution actions are not a general reshuffle.
+- Once published, the team structure stays fixed until the rotation finishes or an organizer ends it early. Explicit departures, replacements, and game-specific temporary substitutes (six-team format) or between-game permanent transfers (five-team format) are exceptions; they are not a full team reshuffle.
 
 ## Schedules — validated mathematical core
 
@@ -70,19 +70,33 @@ Opening winners get **three** games; the other three teams get **two**. All six 
 
 **Scheduling constraints that must be visible in UI:**
 - Five-team scheduling requires some teams to **move between courts**, unlike six-team scheduling. A dependent game may wait for the *other* court's result, and that is acceptable: display "Waiting for other court" rather than starting with an unavailable team.
-- Exactly **one team rests per round** in a five-team/two-court schedule. There cannot be a resting team on *both* courts simultaneously. The same-court substitution rule therefore sometimes means **no eligible resting team is available on one court**. Never silently borrow from the other court.
-- Court-assignment semantics for a resting team in this five-team case must be explicit before enabling public substitution submissions. This is a real scheduling constraint, not an algorithm bug.
+- Exactly **one team rests per round** in a five-team/two-court schedule. There is no fixed assignment of teams to courts, and a resting team could be needed on either court next. **Therefore temporary substitutions are disabled in five-team rotations.** Use a valid between-game permanent transfer instead.
+- A transfer changes a player's team membership for the **remainder of the current rotation only**. It cannot happen in the middle of a game or cause either team to fall below the playable lineup size. At the next team reshuffle, players are all available for new assignment.
+- Prevent starting a match if a team or player is unavailable due to a still-active game on the other court. A match may wait for a prerequisite result; this is not considered a permanent court assignment.
 
 All schedule invariants above are covered by the dedicated pure-function test suite; this is **not** yet a full server-authorized match engine.
 
-## On-court substitutions
+## Temporary substitutes and rotation-long transfers
 
-- Players arrange them in person. Routine substitutions require **no organizer approval**.
-- Any player with the public Teams Manager link may **record** a same-court, available, consenting substitute, subject to strict server validation; the organizer can correct the record.
-- The substitute must come from a **resting team assigned to the court needing help**, not from the other court. A person cannot be assigned to two concurrent games.
-- One-game substitutions do not permanently change team membership and do **not count** toward regular-game fairness numbers. Store substitute appearances separately, visible to organizers only.
-- Permanent late-arrival replacements are organizer-managed roster changes between games.
-- When no eligible substitute is available, the match may be played short-handed or deferred; do not forcibly reshuffle.
+### Six-team rotations: temporary one-game substitutes
+
+- Players arrange substitutions in person. Routine substitutions require **no organizer approval**.
+- Anyone with the public Teams Manager link may **record** a same-court, available, consenting substitute, subject to strict server validation; the organizer can correct a mistake.
+- The substitute must come from a **resting team assigned to the same court** as the team needing help, never from the other court. A player cannot play two simultaneous games.
+- One-game substitutions do not permanently change team membership; these **substitute appearances are tracked separately** from regular game counts and are visible to organizers only.
+- When no eligible substitute exists, a match may be deferred or played short-handed if the selected format permits it. Do not forcibly reshuffle.
+
+### Five-team rotations: transfers until next reshuffle
+
+- **No temporary substitutions.** Since teams move across courts, borrowing a resting player for only one game may create a conflict when the player's original team needs them next.
+- Instead, when teams agree and a transfer is legal, move a player to another team **between games**. The transfer persists for the **remainder of that rotation** and resets at the next organizer-published reshuffle.
+- Neither the origin nor destination team may be playing when the transfer is applied. The origin team must still have enough available players to meet the chosen on-court format. Reject moves that would double-book a player or leave the original team unable to play.
+- Record the transfer and the player's **actual regular game appearances**, not phantom appearances based on the team's prior schedule. They are **not substitute appearances**.
+- If no legal transfer is available, wait until a suitable game boundary, play a supported smaller format, or defer the game; never force a mid-game interruption or automatically borrow across courts.
+
+### Other roster changes
+
+- Permanent late-arrival replacements are organizer-managed changes between games. Replacements, breaks, and departures do not automatically trigger a whole-rotation reshuffle.
 
 ## Public game workflow
 
@@ -108,14 +122,14 @@ New isolated data model:
 - Private `team_manager_profiles`: profile ID, normalized unique email, skill/gender/positions, audit timestamps; organizer-only RLS.
 - `team_manager_sessions`: selected event ID, 1-active-session invariant, settings, status, version.
 - `team_manager_session_players`: present/late/break/departed state, profile ID, optional registration ID, display name.
-- `team_manager_rotations`, `team_manager_teams`, `team_manager_team_members`: unpublished draft and current published roster snapshots, balance settings and court assignments.
+- `team_manager_rotations`, `team_manager_teams`, `team_manager_team_members`: unpublished draft and current published roster snapshots, balance settings, court assignments where applicable, and a history of approved between-game five-team transfers.
 - `team_manager_games`, `team_manager_game_participants`, `team_manager_substitutions`: match state, actual players on court, winner, substitution role.
 - Restricted action log with timestamps, action type, changed IDs, and organizer identity when authenticated; no public emails.
 
 Use separate, **narrow RPC endpoints**:
 - Organizer-only: choose source event, import players, edit profiles/attendance, generate and publish teams, correct results, end session, view private stats.
 - Public read: fetch only sanitized active-session state (even if source event is invite-only, as the owner requested).
-- Public write: start eligible game, submit its winner, record one-game eligible substitute. No arbitrary public table INSERT/UPDATE.
+- Public write: start eligible game, submit its winner, and record a one-game eligible substitute **only for a supported format**. Implement a separate validated five-team transfer workflow; its authorization and audit requirements must be tested explicitly. No arbitrary public table INSERT/UPDATE.
 
 Concurrency: server-side validation and row locking/version checking for every state-changing RPC. Lock enough records to enforce first-valid-write and no double-booked substitutes; reject stale writes. Audit public actions without pretending a public user has a verified identity. Consider rate limits and abuse recovery given anonymous write permission.
 
@@ -131,7 +145,7 @@ Concurrency: server-side validation and row locking/version checking for every s
 
 ## Decisions still requiring validation before live release
 
-- How to display/limit the available **same-court substitute pool for five-team scheduling**, when only one team rests for two simultaneously active courts.
+- Validate **five-team permanent-transfer** timing, source-team lineup capacity, and fairness accounting with concurrent match-state tests; temporary substitutes are explicitly prohibited in this format.
 - Organizer defaults for **playing format** (4v4/5v5/6v6) across attendance counts and public vs private events, especially when extra roster players must rotate into individual games.
 - Anonymous write abuse/rate-limit expectations and how to recover from malicious or mistaken player inputs.
 - What should happen when teams cannot field enough players for a legitimate game; do not automatically steal from another court.
