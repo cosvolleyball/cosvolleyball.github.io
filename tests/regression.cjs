@@ -731,6 +731,8 @@ const results = [];
     assert.equal(
       await page.evaluate(() => {
         testing.setOrganizer(true);
+        document.getElementById("admin-panel").hidden = false;
+        document.getElementById("admin-login").hidden = true;
         const events = document.getElementById("dashboard-tab-events");
         const finance = document.getElementById("dashboard-tab-finance");
         const press = key => document.activeElement.dispatchEvent(new KeyboardEvent("keydown",{
