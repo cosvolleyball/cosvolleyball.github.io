@@ -236,6 +236,13 @@ begin
   if p_format not in (4, 5, 6) then
     raise exception 'Format must be 4v4, 5v5 or 6v6' using errcode = '22023';
   end if;
+  if p_format=5 and exists (
+    select 1 from public.events
+    where id=p_event_id and visibility='private'
+  ) then
+    raise exception 'Private competitive events support only 4v4 or 6v6'
+      using errcode='22023';
+  end if;
   -- The unique active-session index rejects concurrent starts atomically.
   insert into public.tm_sessions(event_id, event_title, format, balance_skill,
     balance_gender, balance_positions, created_by)
@@ -430,6 +437,7 @@ as $$
 declare
   v_session public.tm_sessions%rowtype;
   v_rotation uuid;
+  v_rotation_status text;
   v_title text;
   v_teams jsonb;
   v_games jsonb;
@@ -441,7 +449,7 @@ begin
   end if;
 
   v_title := v_session.event_title;
-  select id into v_rotation from public.tm_rotations
+  select id,status into v_rotation,v_rotation_status from public.tm_rotations
     where session_id=v_session.id
       and status in ('published','completed','ended_early')
     order by sequence desc limit 1;
@@ -471,6 +479,7 @@ begin
     'format',v_session.format,
     'revision',v_session.revision,
     'rotation_id',v_rotation,
+    'rotation_status',v_rotation_status,
     'teams',v_teams,
     'games',v_games
   );
