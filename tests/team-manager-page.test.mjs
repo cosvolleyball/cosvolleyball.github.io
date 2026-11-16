@@ -41,6 +41,9 @@ test("all Teams Manager organizer actions are named and accessible",()=>{
     "tm-save-draft","tm-publish","tm-end-rotation","tm-end-session",
     "tm-roster-adjust","tm-arrival-player","tm-arrival-team",
     "tm-replace-player","tm-assign-arrival",
+    "tm-appearance-correction","tm-correct-game",
+    "tm-incorrect-player","tm-correct-player",
+    "tm-correct-appearance-save",
     "tm-draft-balance-skill","tm-draft-balance-gender","tm-draft-balance-positions"
   ];
   for(const id of ids) assert(doc.getElementById(id),"Missing control: "+id);
