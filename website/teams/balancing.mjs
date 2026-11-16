@@ -9,6 +9,29 @@
  */
 const pairKey = (a, b) => JSON.stringify([a, b].sort());
 
+const frontRole = player => (player.positions||[]).some(p =>
+  ["middle","middle blocker","mb"].includes(normalized(p)));
+const backRole = player => (player.positions||[]).some(p =>
+  ["libero","defensive specialist","ds"].includes(normalized(p)));
+
+function pairedRoles(team) {
+  const front=team.filter(frontRole);
+  const back=team.filter(backRole);
+  for(const a of front)for(const b of back)if(a.id!==b.id)return [a,b];
+  return null;
+}
+
+/** Organizer-only suggestion; the actual on-court players choose when to rotate. */
+export function suggestSharedRolePairs(players, draftTeams, format) {
+  if(![4,5,6].includes(format))throw new RangeError("Invalid playing format.");
+  const lookup=new Map(players.map(p=>[p.id,p]));
+  return draftTeams.flatMap(team=>{
+    if(team.playerIds.length<=format)return [];
+    const pair=pairedRoles(team.playerIds.map(id=>lookup.get(id)).filter(Boolean));
+    return pair ? [{seed:team.seed,playerIds:pair.map(p=>p.id)}] : [];
+  });
+}
+
 export function seededRandom(seed = 1) {
   let state = (Number(seed) >>> 0) || 1;
   return () => {
@@ -89,6 +112,15 @@ function scoreTeams(teams, options, pastPairs) {
       for (let j = i + 1; j < team.length; j++) {
         score += 4 * (pastPairs.get(pairKey(team[i].id, team[j].id)) || 0);
       }
+    }
+  }
+
+  // A seven-player 6v6 roster can share a front-row / back-row role
+  // (for example middle blocker + libero). Encourage complementary pairs
+  // only when there is an extra teammate to rotate, without requiring one.
+  if (balancePositions && options.format===6) {
+    for (const team of teams) {
+      if (team.length>options.format && pairedRoles(team))score -= 5;
     }
   }
 
@@ -186,6 +218,7 @@ export function scoreBalancedDraft(players, draftTeams, options) {
     throw new RangeError("Draft must assign every available player exactly once.");
   const cfg = {
     teamCount:options.teamCount,
+    format:options.format,
     balanceSkill:options.balanceSkill!==false,
     balanceGender:options.balanceGender===true,
     balancePositions:options.balancePositions===true&&options.format!==4
@@ -204,6 +237,7 @@ export function generateBalancedTeams(players, options) {
   validate(players, options);
   const cfg = {
     teamCount: options.teamCount,
+    format: options.format,
     balanceSkill: options.balanceSkill !== false,
     balanceGender: options.balanceGender === true,
     balancePositions: options.balancePositions === true && options.format !== 4
