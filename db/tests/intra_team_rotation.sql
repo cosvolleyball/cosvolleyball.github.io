@@ -101,6 +101,39 @@ begin
        where game_id=v_game and team_id=v_team1 and not is_substitute)<>7 then
     raise exception 'Seven-person teammate rotation lost an appearance';
   end if;
+  -- After the first partial round robin, the SAME organizer may reshuffle
+  -- all 25 check-ins into six teams: 5,4,4,4,4,4 playing 4v4.
+  perform public.tm_org_end_rotation(v_rotation,true);
+  v_payload:='[]'::jsonb;
+  for v_i in 1..6 loop
+    v_size:=case when v_i=1 then 5 else 4 end;
+    select jsonb_agg(id order by id) into v_members from (
+      select id from public.tm_session_players
+        where session_id=v_session order by id limit v_size
+          offset case when v_i=1 then 0 else 5+(v_i-2)*4 end
+    ) q;
+    v_payload:=v_payload||jsonb_build_array(
+      jsonb_build_object('seed',v_i,'playerIds',v_members));
+  end loop;
+  select revision into v_revision from public.tm_sessions where id=v_session;
+  perform public.tm_org_save_draft(v_session,v_revision,
+    jsonb_build_object('playing_format',4,'teams',v_payload));
+  select revision into v_revision from public.tm_sessions where id=v_session;
+  v_rotation:=public.tm_org_publish_draft(v_session,v_revision);
+  v_snapshot:=public.tm_public_snapshot();
+  if (v_snapshot->>'format')::integer<>4
+     or jsonb_array_length(v_snapshot->'teams')<>6
+     or (select count(*) from public.tm_memberships
+       where rotation_id=v_rotation)<>25 then
+    raise exception 'Reshuffle to six 4v4 teams lost attendees';
+  end if;
+  select id into v_game from public.tm_games
+    where rotation_id=v_rotation and round_number=1 and court=1;
+  perform public.tm_public_start_game(v_game);
+  if (select count(*) from public.tm_game_appearances
+       where game_id=v_game and active_on_court)<>8 then
+    raise exception 'Reshuffled 4v4 game must have eight on-court participants';
+  end if;
   perform public.tm_org_end_session(v_session);
-  raise notice '25-player 6v6 teammate rotation and format override passed';
+  raise notice '25-player session changed 4-team 6v6 to 6-team 4v4 successfully';
 end $intra_team_contract$;
