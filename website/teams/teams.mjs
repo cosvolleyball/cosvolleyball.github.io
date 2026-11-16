@@ -45,6 +45,92 @@ async function action(fn) {
 function teamName(teams, id) {
   return teams.find(t=>t.id===id)?.label || "To be decided";
 }
+function gameControls(g, teams, session) {
+  if (session.rotation_status !== "published") return "";
+  if (g.status === "ready") {
+    const resting = teams.length === 6
+      ? teams.find(t => t.court === g.court &&
+          t.id !== g.team_a_id && t.id !== g.team_b_id)
+      : null;
+    const options = resting?.players || [];
+    const borrowed = session.pendingSubs?.[g.id] || [];
+    return `<div class="tm-game-actions">
+      <button type="button" class="tm-button" data-tm-game-action="start"
+        data-game-id="${escapeHtml(g.id)}">Start game</button>
+      ${options.length ? `<div class="tm-sub-form">
+        <strong>Voluntary substitute from ${escapeHtml(resting.label)}</strong>
+        <label>Player<select data-sub-player="${escapeHtml(g.id)}">
+          <option value="">Choose player…</option>
+          ${options.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
+        </select></label>
+        <label>Playing for<select data-sub-team="${escapeHtml(g.id)}">
+          <option value="">Choose team…</option>
+          ${[g.team_a_id,g.team_b_id].map(id=>
+            `<option value="${escapeHtml(id)}">${escapeHtml(teamName(teams,id))}</option>`).join("")}
+        </select></label>
+        <button type="button" class="tm-button tm-secondary"
+          data-tm-game-action="sub" data-game-id="${escapeHtml(g.id)}">Record sub</button>
+        ${borrowed.length ? `<div class="tm-pending-subs">
+          ${borrowed.map(p=>`<div>
+            ${escapeHtml(p.name)} → ${escapeHtml(teamName(teams,p.team_id))}
+            <button type="button" class="tm-button tm-secondary"
+              data-tm-game-action="cancel-sub" data-game-id="${escapeHtml(g.id)}"
+              data-player-id="${escapeHtml(p.player_id)}">Remove</button>
+          </div>`).join("")}
+        </div>` : ""}
+      </div>` : ""}
+    </div>`;
+  }
+  if (g.status === "playing") {
+    return `<div class="tm-game-actions">
+      <label>Winner<select data-report-winner="${escapeHtml(g.id)}">
+        <option value="">Select winner…</option>
+        ${[g.team_a_id,g.team_b_id].map(id=>
+          `<option value="${escapeHtml(id)}">${escapeHtml(teamName(teams,id))}</option>`).join("")}
+      </select></label>
+      <button type="button" class="tm-button"
+        data-tm-game-action="winner" data-game-id="${escapeHtml(g.id)}">Report winner</button>
+    </div>`;
+  }
+  if (g.status === "completed" && state.isOrganizer) {
+    const other = [g.team_a_id,g.team_b_id].find(id=>id!==g.winner_team_id);
+    return `<div class="tm-game-actions">
+      <button type="button" class="tm-button tm-secondary"
+        data-tm-game-action="correct-winner" data-game-id="${escapeHtml(g.id)}"
+        data-winner-id="${escapeHtml(other)}">
+        Correct winner to ${escapeHtml(teamName(teams,other))}
+      </button>
+    </div>`;
+  }
+  return "";
+}
+
+function rotationTransferControls(teams, session) {
+  if (teams.length !== 5 || session.rotation_status !== "published") return "";
+  const allPlayers = teams.flatMap(team=>(team.players||[])
+    .map(p=>({id:p.id,name:p.name,from:team.label})));
+  return `<section class="tm-panel tm-transfer" aria-labelledby="tm-transfer-title">
+    <h3 id="tm-transfer-title">Five-team player transfers</h3>
+    <p>Move a player between games only. This assignment lasts until the
+      next organizer-published reshuffle. No mid-game interruptions or temporary subs.</p>
+    <div class="tm-form tm-inline">
+      <label>Player<select id="tm-transfer-player">
+        <option value="">Choose player…</option>
+        ${allPlayers.map(p=>`<option value="${escapeHtml(p.id)}">
+          ${escapeHtml(p.name)} (${escapeHtml(p.from)})
+        </option>`).join("")}
+      </select></label>
+      <label>New team<select id="tm-transfer-target">
+        <option value="">Choose team…</option>
+        ${teams.map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.label)}</option>`).join("")}
+      </select></label>
+      <button type="button" class="tm-button tm-secondary"
+        data-tm-game-action="transfer"
+        data-rotation-id="${escapeHtml(session.rotation_id)}">Transfer until reshuffle</button>
+    </div>
+  </section>`;
+}
+
 function renderPublic() {
   const s = state.snapshot;
   const status = $("tm-status");
@@ -88,6 +174,7 @@ function renderPublic() {
           <small>Game ${g.round} · ${escapeHtml(statusValue)}</small>
           <strong>${escapeHtml(left)} vs ${escapeHtml(right)}</strong>
           <small>${escapeHtml(result)}</small>
+          ${gameControls(g,teams,s)}
         </div>`;
       }).join("")}
       ${complete && s.rotation_status === "published"
@@ -102,7 +189,8 @@ function renderPublic() {
   </article>`).join("");
   container.innerHTML = `<h3>${escapeHtml(s.event_title || "Volleyball session")}</h3>
     <div class="tm-courts">${courts}</div>
-    <h3>Team rosters</h3><div class="tm-team-grid">${rosters}</div>`;
+    <h3>Team rosters</h3><div class="tm-team-grid">${rosters}</div>
+    ${rotationTransferControls(teams,s)}`;
 }
 
 function formatStats(stats) {
