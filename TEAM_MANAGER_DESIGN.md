@@ -27,6 +27,10 @@
 - Organizers generate **preview drafts**, regenerate as often as needed, manually swap/move players, undo local edits, and explicitly publish.
 - Independent toggles: skill balance, gender balance, preferred-position balance. Position balancing is disabled when the **playing format is 4v4**.
 - Generate balanced teams with randomized tie-breaking and penalties for repeated teammate pairings across the *current session*. Previous sessions do not affect participation/game counts.
+- **Before every organizer-initiated reshuffle**, recount currently checked-in/available players and ask for the **number of teams (4/5/6)** and the **playing format (4v4/5v5/6v6)**. These are separate choices, stored **on each rotation**, not fixed for the event. Display the exact roster distribution and flag options requiring temporary borrowed players.
+- Example **25 available**: six 4v4 teams of sizes **5,4,4,4,4,4**, five 5v5 teams of **5 each** (public events only), or four 6v6 teams of sizes **7,6,6,6**. Private competitive event formats remain limited to 4v4/6v6.
+- Teams with an extra roster member (e.g., seven for 6v6 or five for 4v4) can rotate a **teammate within a live game** using a one-for-one regular lineup change, without borrowing from a different team. Both players receive one **regular** appearance if they actually take the court; re-entry never counts twice. This does not change the existing five-team transfer / six-team temporary-sub rules.
+- For seven-player 6v6 rosters and optional position balancing, look for compatible **front-row/back-row shared-role pairings** (e.g., middle blocker and libero) and show organizer-only suggestions. Keep preferred-position attributes private, never hardcode an assumption that every team must have a libero/middle pairing, and do not force volleyball position swaps without players agreeing.
 - Do not require every roster to be divisible by the number of on-court positions. Distribute all present, available players into team rosters when feasible.
 - A roster may contain one or more extra players (e.g., five-person roster in a 4v4 match); the **actual lineup for each match** determines who played. Between-match lineup rotation must give extra roster members opportunities without midgame forced swaps.
 - Organizers may override the recommended distribution and court assignments before publication.
@@ -44,7 +48,7 @@ A **game round** is one scheduled game per active court. A **rotation** comprise
 | 2 | A–C | B–D |
 | 3 | A–D | B–C |
 
-Six unique matches. Every team plays **three**, no resting team while both courts play. This means **resting-team substitution is unavailable** in a standard four-team round; extra roster players may rotate into each team's lineup between matches.
+Six unique matches. Every team plays **three**, no resting team while both courts play. This means **resting-team substitution is unavailable** in a standard four-team round; extra roster players may rotate into a team's on-court lineup **during or between** matches as ordinary teammates.
 
 ### Six teams: three teams permanently assigned per court
 
@@ -124,7 +128,7 @@ New isolated data model:
 - Private `team_manager_profiles`: profile ID, normalized unique email, skill/gender/positions, audit timestamps; organizer-only RLS.
 - `team_manager_sessions`: selected event ID, 1-active-session invariant, settings, status, version.
 - `team_manager_session_players`: present/late/break/departed state, profile ID, optional registration ID, display name.
-- `team_manager_rotations`, `team_manager_teams`, `team_manager_team_members`: unpublished draft and current published roster snapshots, balance settings, court assignments where applicable, and a history of approved between-game five-team transfers.
+- `tm_rotations`, `tm_teams`, `tm_memberships`: unpublished draft and current published roster snapshots, **rotation-specific playing format**, balance settings, court assignments where applicable, and a history of approved between-game five-team transfers.
 - `team_manager_games`, `team_manager_game_participants`, `team_manager_substitutions`: match state, actual players on court, winner, substitution role.
 - Restricted action log with timestamps, action type, changed IDs, and organizer identity when authenticated; no public emails.
 
@@ -142,13 +146,13 @@ Concurrency: server-side validation and row locking/version checking for every s
 1. **Foundation (this branch):** inspected schema/site structure; tested pure scheduling invariants for 4/5/6 teams and organizer-only draft balancing; this living spec. No public link or production backend alterations.
 2. **Data contract and security:** foundation plus organizer draft/publish SQL review drafts are committed in `db/drafts/` and integrated against PostgreSQL 17 fixtures in CI. Still outstanding: the public game-action RPCs, concurrency tests, true Supabase staging/RLS verification, and migration review. **Nothing has been applied to production.**
 3. **Organizer experience (initial implementation):** the new isolated `website/teams/` page includes an event picker, attendance, walk-ins, profile editing, local draft generation/regeneration, swaps, moves, undo, private draft saving, explicit publish, early rotation closing and private session statistics. It is not production-tested and is not deployed.
-4. **Public experience (partial):** same-site navigation now links to the new Teams Manager; it renders sanitized active-session teams/courts and refreshes on an 8-second interval without page reload. Next implement fully validated anonymous start/winner/substitute actions, result correction, match-dependent scheduling, and low-latency realtime notifications.
+4. **Public experience (initial implementation):** same-site navigation now links to the new Teams Manager; it renders sanitized active-session teams/courts and refreshes automatically at an 8-second interval. The feature branch now includes anonymous game start, winner reporting, same-court voluntary subs for six teams, five-team permanent transfers, emergency injury substitutions, ordinary in-game teammate rotations, and organizer corrections. These are backed by isolated PostgreSQL tests, **not yet staging or production verification**. Still missing: true realtime notification subscriptions, negative/security abuse testing, comprehensive concurrent connection tests, and real-device QA.
 5. **Unusual attendance and end-to-end QA:** 4v4/5v5/6v6 lineup capacities, player breaks, late/early movement, five-team court transitions, full real-device testing; release only when confirmed.
 
 ## Decisions still requiring validation before live release
 
 - Validate **five-team permanent-transfer** timing, source-team lineup capacity, and fairness accounting with concurrent match-state tests; temporary substitutes are explicitly prohibited in this format.
-- Organizer defaults for **playing format** (4v4/5v5/6v6) across attendance counts and public vs private events, especially when extra roster players must rotate into individual games.
+- Exercise **per-rotation format changes** across one session (e.g., 25 check-ins: 4 teams 6v6 then 6 teams 4v4) and ensure attendance, position-balancing toggles, and participation stats remain correct when player counts change.
 - Anonymous write abuse/rate-limit expectations and how to recover from malicious or mistaken player inputs.
 - What should happen when teams cannot field enough players for a legitimate game; do not automatically steal from another court.
 
