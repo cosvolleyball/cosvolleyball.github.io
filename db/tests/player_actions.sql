@@ -14,6 +14,7 @@ declare
   v_team6 uuid;
   v_sub uuid;
   v_other uuid;
+  v_target_bench uuid;
   v_index integer;
   v_size integer;
 begin
@@ -164,6 +165,13 @@ begin
     raise exception 'Five-team temporary substitute was accepted';
   exception when sqlstate '22023' then null;
   end;
+  -- Team 2 has an extra roster member; give them a break so the
+  -- transferred player is guaranteed to appear in this actual lineup.
+  select session_player_id into v_target_bench
+  from public.tm_memberships
+  where rotation_id=v_rotation and team_id=v_team2
+    and session_player_id<>v_sub limit 1;
+  perform public.tm_org_set_attendance(v_target_bench,'break');
   perform public.tm_public_start_game(v_game);
   begin
     perform public.tm_public_transfer(v_rotation,v_sub,v_team1);
