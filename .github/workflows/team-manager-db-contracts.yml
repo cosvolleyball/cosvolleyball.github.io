@@ -67,3 +67,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_team_history.sql
       - name: Verify history only counts actual shared completed games
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/history.sql
+      - name: Apply roster replacement RPC locally
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_roster_adjustments.sql
+      - name: Test late arrival and departure roster changes without midgame interruption
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/roster_adjustments.sql
