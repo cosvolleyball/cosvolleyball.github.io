@@ -84,6 +84,11 @@ function gameControls(g, teams, session) {
     </div>`;
   }
   if (g.status === "playing") {
+    const resting=teams.length===6
+      ? teams.find(t=>t.court===g.court &&
+          t.id!==g.team_a_id && t.id!==g.team_b_id)
+      : null;
+    const activeLineup=session.liveLineups?.[g.id]||[];
     return `<div class="tm-game-actions">
       <label>Winner<select data-report-winner="${escapeHtml(g.id)}">
         <option value="">Select winner…</option>
@@ -92,6 +97,29 @@ function gameControls(g, teams, session) {
       </select></label>
       <button type="button" class="tm-button"
         data-tm-game-action="winner" data-game-id="${escapeHtml(g.id)}">Report winner</button>
+      ${resting && activeLineup.length ? `<div class="tm-sub-form">
+        <strong>Emergency injury substitution (six-team games only)</strong>
+        <label>Player leaving court
+          <select data-emergency-out="${escapeHtml(g.id)}">
+          <option value="">Choose outgoing player…</option>
+          ${activeLineup.map(p=>`<option value="${escapeHtml(p.player_id)}">
+            ${escapeHtml(p.name)} (${escapeHtml(teamName(teams,p.team_id))})
+          </option>`).join("")}
+          </select>
+        </label>
+        <label>Replacement from ${escapeHtml(resting.label)}
+          <select data-emergency-in="${escapeHtml(g.id)}">
+            <option value="">Choose replacement…</option>
+            ${(resting.players||[]).filter(p=>
+              !activeLineup.some(a=>a.player_id===p.id)).map(p=>
+              `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
+          </select>
+        </label>
+        <button type="button" class="tm-button tm-secondary"
+          data-tm-game-action="emergency" data-game-id="${escapeHtml(g.id)}">
+          Record emergency substitution
+        </button>
+      </div>` : ""}
     </div>`;
   }
   if (g.status === "completed" && state.isOrganizer) {
@@ -447,15 +475,23 @@ async function refresh(forcePrivate = false) {
   state.refreshing=true;
   try {
     const snapshot = await rpc("tm_public_snapshot");
-    if (snapshot?.active && snapshot.rotation_status === "published" &&
-        snapshot.teams?.length === 6) {
+    if (snapshot?.active && snapshot.rotation_status === "published") {
       const ready = (snapshot.games||[]).filter(g=>g.status==="ready");
-      const rows = await Promise.all(ready.map(async g=>({
-        id:g.id, subs:await rpc("tm_public_game_subs",{p_game_id:g.id})
-      })));
-      snapshot.pendingSubs = Object.fromEntries(
-        rows.map(row=>[row.id,Array.isArray(row.subs)?row.subs:[]])
-      );
+      const playing = (snapshot.games||[]).filter(g=>g.status==="playing");
+      if(snapshot.teams?.length===6){
+        const rows = await Promise.all(ready.map(async g=>({
+          id:g.id,subs:await rpc("tm_public_game_subs",{p_game_id:g.id})
+        })));
+        snapshot.pendingSubs = Object.fromEntries(
+          rows.map(row=>[row.id,Array.isArray(row.subs)?row.subs:[]])
+        );
+        const lineups = await Promise.all(playing.map(async g=>({
+          id:g.id,players:await rpc("tm_public_game_lineup",{p_game_id:g.id})
+        })));
+        snapshot.liveLineups=Object.fromEntries(
+          lineups.map(row=>[row.id,Array.isArray(row.players)?row.players:[]])
+        );
+      }
     }
     // Avoid resetting a user's form selections on every automatic poll.
     const before = state.snapshot;
@@ -558,6 +594,18 @@ $("tm-public-content").addEventListener("click",e=>{
         p_game_id:gameId,p_session_player_id:player
       });
       feedback("Planned substitute removed.");
+    }else if(name==="emergency"){
+      if(!game || game.status!=="playing")
+        throw new Error("Game is no longer in progress.");
+      const outgoing=document.querySelector('[data-emergency-out="'+gameId+'"]')?.value;
+      const incoming=document.querySelector('[data-emergency-in="'+gameId+'"]')?.value;
+      if(!outgoing||!incoming)
+        throw new Error("Choose the injured player and an available resting-team substitute.");
+      if(!window.confirm("Record an emergency in-game substitution? The injured player's game appearance will still count."))return;
+      await rpc("tm_public_emergency_sub",{
+        p_game_id:gameId,p_out_player_id:outgoing,p_in_player_id:incoming
+      });
+      feedback("Emergency substitution recorded; both player appearances are tracked.");
     }else if(name==="transfer"){
       if(state.snapshot?.teams?.length!==5 ||
           state.snapshot.rotation_status!=="published")
