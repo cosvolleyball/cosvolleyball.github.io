@@ -113,6 +113,6 @@ test("public: the view updates without a full browser reload",async()=>{
     await t.refresh();
     const doc=t.dom.window.document;
     assert.match(doc.querySelector("#tm-public-content").textContent,/Game started/);
-    assert(!doc.querySelector("#tm-organizer").hidden===false);
+    assert(doc.querySelector("#tm-organizer").hidden);
   }finally{t.close();}
 });
