@@ -79,3 +79,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_intra_team_rotation.sql
       - name: Test 25-player 6v6 with seven-person roster and role sharing
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/intra_team_rotation.sql
+      - name: Apply sanitized public broadcast trigger locally ONLY
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_realtime.sql
+      - name: Verify broadcast payload privacy and session invalidation behavior
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/realtime.sql
