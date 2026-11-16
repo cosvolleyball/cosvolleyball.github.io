@@ -13,6 +13,7 @@ const state = {
   snapshot: null,
   roster: [],
   stats: [],
+  priorTeammates: [],
   events: [],
   draft: null,
   savedDraftId: null,
@@ -352,13 +353,15 @@ function renderOrganizer() {
 async function loadPrivate() {
   const session=state.snapshot?.session_id;
   if(!session || !state.isOrganizer)return;
-  const [roster,stats,remote] = await Promise.all([
+  const [roster,stats,remote,pairs] = await Promise.all([
     rpc("tm_org_roster",{p_session_id:session}),
     rpc("tm_org_stats",{p_session_id:session}),
-    rpc("tm_org_draft",{p_session_id:session})
+    rpc("tm_org_draft",{p_session_id:session}),
+    rpc("tm_org_teammate_pairs",{p_session_id:session})
   ]);
   state.roster=Array.isArray(roster)?roster:[];
   state.stats=Array.isArray(stats)?stats:[];
+  state.priorTeammates=Array.isArray(pairs)?pairs:[];
   if(remote && (!state.draft || state.savedDraftId)){
     state.draft={teams:remote.teams,qualityScore:null};
     state.savedDraftId=remote.rotation_id;
@@ -576,7 +579,7 @@ $("tm-generate").addEventListener("click",()=>void action(async()=>{
   const chosen=Number($("tm-team-count").value);
   const format=Number(state.snapshot.format);
   const opts={
-    teamCount:chosen,format,priorTeammates:[],
+    teamCount:chosen,format,priorTeammates:state.priorTeammates,
     balanceSkill:$("tm-draft-balance-skill").checked,
     balanceGender:$("tm-draft-balance-gender").checked,
     balancePositions:format!==4&&$("tm-draft-balance-positions").checked
