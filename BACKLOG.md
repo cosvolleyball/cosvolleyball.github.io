@@ -2,9 +2,36 @@
 
 **Last reviewed:** 2026-11-16
 **Project:** [Colorado Springs Pickup Volleyball](https://cosvolleyball.github.io/)  
-**Status:** No urgent development work currently scheduled.
+**Status:** Active improvement batch approved; production remains in maintenance mode until reviewed changes are deployed.
 
 This file is the shared source of truth for planned website work. Keep this list current as features are agreed, started, completed, or explicitly deferred. Do not add private player information, credentials, secret keys, or database exports; this repository is public.
+
+## Approved improvements (2026-11-16)
+
+### 1. Duplicate an existing event — Implemented; awaiting merge and live smoke test
+- Add an organizer-only "Duplicate event" action to existing events.
+- Copy title, venue, start time, duration, capacity, fee, host, payment instructions, visibility, and description.
+- Require selection of a new date, create a separate draft, and do not copy the event ID, private invitation link, registrations, attendance, or payment records.
+- **Acceptance:** creation uses INSERT, never UPDATE; existing event is unchanged, and the new event has no prior players or payments.
+- **Delivery:** implement and test on a feature branch; review before production merge.
+
+### 2. Add to Calendar — Implemented on feature branch; pending review
+- Confirmed registrations show **Google Calendar** and **Apple / Outlook (.ics)** options in their success popup. Waitlisted players do not receive calendar buttons because they do not yet have a reserved spot.
+- Calendar data uses actual UTC start/end instants, with daylight-saving-safe date conversion, and the event's title and gym venue.
+- Calendar content contains no player email, private event invitation token, registration management token, or payment instructions.
+- Both calendar options are keyboard accessible and wrap vertically on narrow screens; no Supabase changes needed.
+- **Acceptance:** automated tests cover UTC/DST, ICS escaping and line folding, missing/invalid times, privacy, waitlist visibility, and download-on-click; manual mobile browser verification remains part of Phase 11 final review.
+
+### 3. Mobile and accessibility audit — Implemented; real-device QA pending
+- Added public/organizer skip links, accessible dialog labels and focus placement, full organizer keyboard tabs, player/transaction-specific action labels, mobile roster table headings, readable small labels, and 44px touch controls.
+- Added responsive form-control typography and retained existing small-screen layouts.
+- **Automated tests:** accessibility behavior and semantic markup added to the isolated regression suite. The changes are not a claim that real iOS/Android browsers or screen readers were manually tested.
+- **Acceptance:** follow [Phase 11 mobile/accessibility review](docs/PHASE11_MOBILE_ACCESSIBILITY_REVIEW.md) for real-device sign-off after a safe preview or merge.
+
+### 4. Expand regression testing — Implemented; final release check pending
+- Added event duplication, calendar UTC/DST and privacy, accessible dialog/focus, tab keyboard navigation, and labeled controls tests.
+- GitHub Actions now runs isolated frontend regression tests on pull requests **before** merging as well as on deployments; the latest accessibility-specific run passed 45 tests with no failures.
+- **Acceptance:** existing tests continue passing, and new functionality has meaningful positive and negative tests.
 
 ## Deferred / low priority
 

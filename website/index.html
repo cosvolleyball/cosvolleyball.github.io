@@ -13,6 +13,8 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<a class="skip-link skip-public" href="#main-content">Skip to events and information</a>
+<a class="skip-link skip-organizer" href="#admin">Skip to organizer dashboard</a>
 <svg class="svg-symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
   <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.3 2"/></symbol>
@@ -58,7 +60,7 @@
   </div>
 </section>
 <div id="notice" class="notice" role="status" hidden></div>
-<main>
+<main id="main-content" tabindex="-1">
   <!-- Event details and account-free cancellation views are rendered here. -->
   <section id="invitation-section" class="invitation-section" aria-label="Event details" hidden>
     <div class="invite-topline">
@@ -84,7 +86,7 @@
   </section>
 </main>
 <!-- Public registration form; player accounts are not required. -->
-<dialog id="signup-dialog">
+<dialog id="signup-dialog" aria-labelledby="signup-title" aria-describedby="signup-summary">
   <!-- Keep the close button outside the scrolling form so it remains reachable on phones. -->
   <div class="signup-dialog-toolbar">
     <span class="signup-dialog-toolbar-label">GET IN THE GAME</span>
@@ -107,24 +109,32 @@
     <p class="signup-roster-notice"><strong>Player roster:</strong> Your name will appear on this event's player roster, visible to anyone who can access its event page. Your email address is only available to organizers.</p>
     <p class="small muted">Registration reserves your spot when available. Pay by Venmo or cash; ask the organizer about other arrangements. Never enter payment or bank details here.</p>
     <button class="button" type="submit" id="submit-signup">Confirm registration</button>
-    <p id="signup-error" class="error" role="alert"></p>
+    <p id="signup-error" class="error" role="alert" aria-live="assertive"></p>
   </form>
 </dialog>
 <!-- Only shown after a successful registration response. Never includes management tokens. -->
-<dialog id="registration-success-dialog" aria-labelledby="registration-success-title">
+<dialog id="registration-success-dialog" aria-labelledby="registration-success-title" aria-describedby="registration-success-description">
   <div class="success-dialog-content">
     <div class="success-check" aria-hidden="true">✓</div>
-    <h2 id="registration-success-title">You're registered!</h2>
+    <h2 id="registration-success-title" tabindex="-1">You're registered!</h2>
     <p id="registration-success-description">Your registration was received.</p>
     <p class="success-email-label">You registered with this email:</p>
     <div class="success-email" id="registration-success-email"></div>
+    <section id="registration-calendar" class="registration-calendar" aria-label="Add this event to your calendar" hidden>
+      <p class="registration-calendar-heading"><strong>Add your session to your calendar</strong></p>
+      <div class="registration-calendar-actions">
+        <a id="calendar-google" class="button secondary" target="_blank" rel="noopener noreferrer">Google Calendar</a>
+        <button id="calendar-download" class="button secondary" type="button" disabled>Apple / Outlook (.ics)</button>
+      </div>
+      <p class="small muted">This saves a reminder, not your registration details. Check your email for your current status.</p>
+    </section>
     <p class="success-reminder"><strong>Check your inbox and Spam/Junk folder.</strong> Your confirmation email should arrive shortly and contains your private link to manage or cancel your registration.</p>
     <p class="small muted">Entered the wrong email? Contact cospickupvolleyball@gmail.com for help. This popup cannot change the submitted address.</p>
     <button type="button" class="button" id="registration-success-dismiss">Got it!</button>
   </div>
 </dialog>
 <!-- Dashboard is a separate ?dashboard=1 view, not part of the homepage. -->
-<section id="admin" class="admin-shell" aria-label="Organizer dashboard">
+<section id="admin" class="admin-shell" aria-label="Organizer dashboard" tabindex="-1">
   <div class="admin-login-view" id="admin-login">
     <div class="admin-login admin-login-card">
       <div class="admin-login-intro"><span class="admin-lock"><svg class="icon"><use href="#i-lock"/></svg></span><span class="section-kicker">PRIVATE ORGANIZER ACCESS</span><h1>Organizer Login</h1><p>Sign in to manage events, registrations and payments.</p></div>
@@ -140,8 +150,8 @@
     </div>
     <!-- Both dashboard tabs require the existing organizer login. -->
     <div class="dashboard-tabs" role="tablist" aria-label="Organizer dashboard sections">
-      <button id="dashboard-tab-events" type="button" class="dashboard-tab active" role="tab" aria-controls="dashboard-events-pane" aria-selected="true">Events & registrations</button>
-      <button id="dashboard-tab-finance" type="button" class="dashboard-tab" role="tab" aria-controls="dashboard-finance-pane" aria-selected="false">Community Finances</button>
+      <button id="dashboard-tab-events" type="button" class="dashboard-tab active" role="tab" tabindex="0" aria-controls="dashboard-events-pane" aria-selected="true">Events & registrations</button>
+      <button id="dashboard-tab-finance" type="button" class="dashboard-tab" role="tab" tabindex="-1" aria-controls="dashboard-finance-pane" aria-selected="false">Community Finances</button>
     </div>
     <div id="dashboard-events-pane" role="tabpanel" aria-labelledby="dashboard-tab-events">
       <!-- Phase 10 access rules. Hidden inside authenticated organizer pane. -->
@@ -220,6 +230,7 @@
   <div class="editor-dialog-head"><div><span class="section-kicker">ORGANIZER WORKSPACE</span><h2 id="editor-modal-label">Event details</h2></div><button type="button" class="editor-dialog-close" id="close-event-editor" aria-label="Close event editor">×</button></div>
   <form id="event-form" class="event-editor">
           <div class="editor-topline"><h3 id="editor-heading">Create an event</h3><span class="editor-aside">All changes save to your Supabase database</span></div>
+          <p id="event-duplicate-hint" class="small muted" hidden>Choose a new date, then save this copy as a draft. Players, payments, and private invitation links are not copied.</p>
           <input type="hidden" id="edit-id">
           <div class="form-grid">
             <label>Event title<input id="event-title" required maxlength="120" placeholder="Saturday Open Gym"></label>

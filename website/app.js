@@ -365,6 +365,92 @@ async function loadInvitedEvent() {
   await loadEvents();
 }
 
+// Calendar files contain only event details, never player emails, invitation
+// tokens, or registration management links. UTC dates preserve the event's
+// actual instant across time zones and daylight-saving transitions.
+const calendarUtc = value => {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")
+    : null;
+};
+function calendarEventDetails(event) {
+  if (!event) return null;
+  const start = calendarUtc(event.starts_at), end = calendarUtc(event.ends_at);
+  return start && end && end > start ? { start, end } : null;
+}
+function googleCalendarLink(event) {
+  const dates = calendarEventDetails(event);
+  if (!dates) return null;
+  const url = new URL("https://calendar.google.com/calendar/render");
+  url.searchParams.set("action", "TEMPLATE");
+  url.searchParams.set("text", String(event.title || "Pickup Volleyball"));
+  url.searchParams.set("dates", `${dates.start}/${dates.end}`);
+  url.searchParams.set("location", String(event.venue || ""));
+  url.searchParams.set("details", "Colorado Springs Pickup Volleyball session. Check your registration email for your current status.");
+  return url.toString();
+}
+// RFC 5545 text escaping and UTF-8 octet-aware folding to 75 bytes per line.
+const icsText = value => String(value || "").replace(/\r\n?/g, "\n")
+  .replace(/\\/g, "\\\\").replace(/\n/g, "\\n")
+  .replace(/,/g, "\\,").replace(/;/g, "\\;");
+function foldIcsLine(line) {
+  const encoder = new TextEncoder();
+  let output = "", bytes = 0;
+  for (const character of line) {
+    const size = encoder.encode(character).length;
+    if (bytes + size > 75) { output += "\r\n "; bytes = 1; }
+    output += character;
+    bytes += size;
+  }
+  return output;
+}
+function createIcsCalendar(event) {
+  const dates = calendarEventDetails(event);
+  if (!dates) return null;
+  const uid = String(event.id || "session").replace(/[^A-Za-z0-9-]/g, "");
+  const lines = [
+    "BEGIN:VCALENDAR", "VERSION:2.0",
+    "PRODID:-//COS Volleyball//Event Calendar//EN",
+    "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "BEGIN:VEVENT",
+    `UID:${uid}@cosvolleyball.github.io`,
+    `DTSTAMP:${calendarUtc(new Date())}`,
+    `DTSTART:${dates.start}`, `DTEND:${dates.end}`,
+    `SUMMARY:${icsText(event.title || "Pickup Volleyball")}`,
+    `LOCATION:${icsText(event.venue || "")}`,
+    `DESCRIPTION:${icsText("Colorado Springs Pickup Volleyball session. Check your registration email for your current status.")}`,
+    "END:VEVENT", "END:VCALENDAR"
+  ];
+  return lines.map(foldIcsLine).join("\r\n") + "\r\n";
+}
+let registeredCalendarEvent = null;
+function configureRegistrationCalendar(event, isRegistered) {
+  const container = $("registration-calendar");
+  const google = $("calendar-google");
+  const download = $("calendar-download");
+  const link = isRegistered ? googleCalendarLink(event) : null;
+  registeredCalendarEvent = link ? event : null;
+  container.hidden = !registeredCalendarEvent;
+  download.disabled = !registeredCalendarEvent;
+  if (link) google.href = link;
+  else google.removeAttribute("href");
+}
+$("calendar-download").addEventListener("click", () => {
+  const event = registeredCalendarEvent;
+  const ics = event && createIcsCalendar(event);
+  if (!ics) return;
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = "cos-volleyball-event.ics";
+  link.hidden = true;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Allow the browser to start downloading before releasing the blob URL.
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+});
 // ── Player registration and email confirmation notice ────────────────────────
 function openSignup(id) {
   const e=eventCache.find(x=>x.id===id);
@@ -374,6 +460,7 @@ function openSignup(id) {
   $("signup-summary").textContent=`${dateTime(e.starts_at)} · ${e.venue} · ${money(e.price_cents)}${e.spots_remaining<=0?" · This registration will join the waitlist.":""}`;
   $("signup-error").textContent="";
   $("signup-dialog").showModal();
+  $("player-name").focus();
 }
 $("close-dialog").addEventListener("click",()=>$("signup-dialog").close());
 // Client-side email checks: syntax and likely domain typos. No claim is made
@@ -442,6 +529,7 @@ $("signup-form").addEventListener("submit",async ev=>{
   if (emailError){
     $("signup-error").textContent=emailError;$("player-email").focus();return;
   }
+  const calendarSourceEvent = eventCache.find(e=>e.id===$("event-id").value);
   const btn=$("submit-signup");btn.disabled=true;btn.textContent="Registering…";$("signup-error").textContent="";
   const { data, error } = await  supabase.rpc("register_for_open_gym",{
     p_event_id:$("event-id").value,p_name:$("player-name").value.trim(),
@@ -472,7 +560,9 @@ $("signup-form").addEventListener("submit",async ev=>{
     ? "You don't have a reserved spot yet. We'll email you if a spot opens."
     : "Your spot has been reserved.");
   $("registration-success-email").textContent = submittedEmail;
+  configureRegistrationCalendar(calendarSourceEvent, data?.status === "registered");
   $("registration-success-dialog").showModal();
+  $("registration-success-title").focus();
   $("signup-form").reset();updateEmailHint();
   if (validInviteToken) await loadInvitedEvent();
   else await loadEvents();
@@ -765,6 +855,20 @@ function openEventEditor(event=null){
   $("event-editor-dialog").showModal();
   $("event-title").focus();
 }
+// Duplicate only editable event settings. Never reuse the original event ID,
+// private invitation token, player registrations, or accounting records.
+function openDuplicateEventEditor(source) {
+  if (!isOrganizer || !source) return;
+  editEvent(source);
+  $("edit-id").value = ""; // Submit uses INSERT, not UPDATE.
+  $("event-date").value = ""; // Require the organizer to choose a new date.
+  $("event-status").value = "draft"; // Do not accidentally publish.
+  $("editor-heading").textContent = "Duplicate event";
+  $("event-duplicate-hint").hidden = false;
+  updateEventEndPreview();
+  $("event-editor-dialog").showModal();
+  $("event-date").focus();
+}
 $("create-event").addEventListener("click",()=>openEventEditor());
 $("close-event-editor").addEventListener("click",()=>$("event-editor-dialog").close());
 $("event-editor-dialog").addEventListener("click",event=>{
@@ -786,6 +890,7 @@ function clearEditor(){
   $("event-duration").value="180";
   $("event-duration-custom").value="180";
   $("editor-heading").textContent="Create an event";
+  $("event-duplicate-hint").hidden=true;
   $("event-save-message").textContent="";
   updateEventEndPreview();
 }
@@ -869,7 +974,7 @@ function phase9RosterRow(r) {
   ].filter(Boolean).join(" · ");
   const cancel = r.registration_status === "cancelled"
     ? '<span class="muted small">Cancelled</span>'
-    : `<button class="button secondary" data-cancel="${esc(r.id)}">Cancel</button>`;
+    : `<button class="button secondary" data-cancel="${esc(r.id)}" aria-label="Cancel registration for ${esc(r.player_name)}">Cancel</button>`;
   const actionableUnpaid = eligible && !noShow && r.payment_status === "unpaid";
   return `<tr class="phase9-player-row ${actionableUnpaid ? "phase9-unpaid-row" : ""}" data-player="${esc(r.id)}">
     <td data-label="Player" class="phase9-player-cell"><strong>${esc(r.player_name)}</strong>
@@ -919,7 +1024,7 @@ function phase9RosterPanel(event, registrations) {
     <div class="phase9-roster-toolbar"><h5>Player check-in</h5>
       <button type="button" class="button secondary phase9-unpaid-toggle" data-unpaid-toggle="${esc(event.id)}" aria-pressed="${unpaidFiltered}">${unpaidFiltered ? "Show all players" : "Show unpaid only"}</button>
     </div>
-    ${registrations.length ? `<div class="phase9-table-scroll"><table class="phase9-roster"><thead><tr><th>Player</th><th>Registration</th><th>Payment</th><th>Method received</th><th>Attendance</th><th>Action</th></tr></thead><tbody>${displayRegistrations.map(phase9RosterRow).join("")}</tbody></table></div>` : '<p class="muted small">No registrations yet.</p>'}
+    ${registrations.length ? `<div class="phase9-table-scroll"><table class="phase9-roster" aria-label="Check-in and payment roster for ${esc(event.title)}"><thead><tr><th scope="col">Player</th><th scope="col">Registration</th><th scope="col">Payment</th><th scope="col">Method received</th><th scope="col">Attendance</th><th scope="col">Action</th></tr></thead><tbody>${displayRegistrations.map(phase9RosterRow).join("")}</tbody></table></div>` : '<p class="muted small">No registrations yet.</p>'}
   </section>`;
 }
 
@@ -1001,6 +1106,7 @@ async function loadAdminEvents(){
       <p class="muted small">${money(e.price_cents)} per player</p>
       <div class="admin-actions">
         <button class="button secondary" data-edit="${e.id}">Edit event</button>
+        <button class="button secondary" type="button" data-duplicate="${esc(e.id)}" aria-label="Duplicate ${esc(e.title)}">Duplicate event</button>
         <button class="button secondary" data-toggle="${e.id}" data-status="${e.status}">${e.status==="published"?"Unpublish":e.status==="cancelled"?"Reopen as draft":"Publish"}</button>
         ${e.status!=="cancelled"?`<button class="button button-warn" data-cancel-event="${e.id}">Cancel event</button>`:"<span class='cancelled-hint'>Cancelled · registrations retained</span>"}
         <button class="button button-danger-outline" data-delete-event="${e.id}">Delete permanently</button>
@@ -1039,6 +1145,8 @@ async function loadAdminEvents(){
     });
   });
   $("admin-events").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>openEventEditor(shown.find(e=>e.id===b.dataset.edit))));
+  $("admin-events").querySelectorAll("[data-duplicate]").forEach(b=>b.addEventListener("click",()=>
+    openDuplicateEventEditor(shown.find(e=>String(e.id)===b.dataset.duplicate))));
   document.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",async()=>{
     const status=b.dataset.status==="published"?"draft":b.dataset.status==="cancelled"?"draft":"published";
     b.disabled=true;
@@ -1160,6 +1268,7 @@ function editEvent(e){
   $("event-visibility").value=e.visibility||"public";
   $("event-description").value=e.description||"";
   $("editor-heading").textContent="Edit event";
+  $("event-duplicate-hint").hidden=true;
   $("event-save-message").textContent=originalMinute!==roundedMinute
   ? "This event used a non-quarter-hour start. The time picker shows the nearest available quarter-hour; review it before saving."
   : "";
@@ -1185,12 +1294,30 @@ function showDashboardTab(which, refresh = true) {
   $("dashboard-finance-pane").hidden = !finance;
   for (const [id, selected] of [["dashboard-tab-events", !finance], ["dashboard-tab-finance", finance]]) {
     $(id).setAttribute("aria-selected", String(selected));
+    $(id).tabIndex = selected ? 0 : -1;
     $(id).classList.toggle("active", selected);
   }
   if (finance && refresh) void loadFinance();
 }
 $("dashboard-tab-events").addEventListener("click", () => showDashboardTab("events"));
 $("dashboard-tab-finance").addEventListener("click", () => showDashboardTab("finance"));
+// Arrow keys, Home and End follow the WAI-ARIA tab keyboard pattern.
+$("dashboard-tab-events").parentElement.addEventListener("keydown", event => {
+  const tabs = [$("dashboard-tab-events"), $("dashboard-tab-finance")];
+  const index = tabs.indexOf(document.activeElement);
+  if (index === -1) return;
+  let next;
+  switch (event.key) {
+    case "ArrowRight": next = (index + 1) % tabs.length; break;
+    case "ArrowLeft": next = (index + tabs.length - 1) % tabs.length; break;
+    case "Home": next = 0; break;
+    case "End": next = tabs.length - 1; break;
+    default: return;
+  }
+  event.preventDefault();
+  showDashboardTab(next === 0 ? "events" : "finance");
+  tabs[next].focus();
+});
 $("finance-refresh").addEventListener("click", () => void loadFinance());
 
 function financeTypeChanged() {
@@ -1331,7 +1458,7 @@ function renderFinances() {
       <td class="finance-number ${voided ? "finance-voided" : ""}">${money(Number(row.amount_cents))}</td>
       <td>${row.event_label ? `${esc(row.event_label)} · ` : ""}${esc(row.note || "")}${voided ? `<div>Reason: ${esc(row.void_reason || "")}</div>` : ""}</td>
       <td><div class="small">Recorded by: ${esc(row.created_by_email || row.created_by || "Unknown (older record)")}</div>${voided ? `<div class="small">Voided by: ${esc(row.voided_by_email || row.voided_by || "Unknown")}</div>` : ""}</td>
-      <td>${voided ? "—" : `<button class="finance-void-button" type="button" data-finance-void="${esc(row.id)}">Void</button>`}</td>
+      <td>${voided ? "—" : `<button class="finance-void-button" type="button" data-finance-void="${esc(row.id)}" aria-label="Void ${esc(kinds[row.kind] || row.kind)} of ${money(Number(row.amount_cents))} on ${esc(row.occurred_on)}">Void</button>`}</td>
     </tr>`;
   }).join("");
   $("finance-history").innerHTML = financeTransactions.length ? `<table class="finance-table">
