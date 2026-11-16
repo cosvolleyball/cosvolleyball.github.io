@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {generateBalancedTeams, seededRandom} from "../website/teams/balancing.mjs";
+import {generateBalancedTeams, scoreBalancedDraft, seededRandom} from "../website/teams/balancing.mjs";
 
 function players(count, make = () => ({})) {
   return Array.from({length: count}, (_, i) => ({
@@ -132,4 +132,34 @@ test("refuse insufficient attendance, duplicate IDs, invalid skill, bad RNG, and
   assert.throws(()=>build(players(24),{priorTeammates:[["a","a",1]]}),/Invalid prior/);
   assert.throws(()=>build(players(24,i=>({positions:i===4?["a","b","c"]:[]}))),
     /two preferred/);
+});
+
+test("manual swaps and moves change visible balance score and undo restores it",()=>{
+  const roster=players(24,i=>({skill:i<12?1:10}));
+  const options={teamCount:4,format:6,balanceSkill:true,priorTeammates:[]};
+  const draft=build(roster,{teamCount:4,format:6});
+  const baseline=scoreBalancedDraft(roster,draft.teams,options);
+  assert.equal(baseline,draft.qualityScore);
+  const original=JSON.parse(JSON.stringify(draft.teams));
+  const lookup=new Map(roster.map(p=>[p.id,p]));
+  const low=draft.teams[0].playerIds.find(id=>lookup.get(id).skill===1);
+  const high=draft.teams[1].playerIds.find(id=>lookup.get(id).skill===10);
+  assert(low&&high,"Balanced teams should contain both rating groups");
+  draft.teams[0].playerIds[draft.teams[0].playerIds.indexOf(low)]=high;
+  draft.teams[1].playerIds[draft.teams[1].playerIds.indexOf(high)]=low;
+  const edited=scoreBalancedDraft(roster,draft.teams,options);
+  assert(edited>baseline,"Deliberately uneven swap should worsen quality score");
+  draft.teams=original;
+  assert.equal(scoreBalancedDraft(roster,draft.teams,options),baseline);
+});
+
+test("manual preview evaluation rejects duplicates, missing players and undersized teams",()=>{
+  const roster=players(24);
+  const draft=build(roster,{teamCount:4,format:6});
+  const options={teamCount:4,format:6};
+  draft.teams[1].playerIds[0]=draft.teams[0].playerIds[0];
+  assert.throws(()=>scoreBalancedDraft(roster,draft.teams,options),/duplicate/);
+  const fresh=build(roster,{teamCount:4,format:6});
+  fresh.teams[0].playerIds.pop();
+  assert.throws(()=>scoreBalancedDraft(roster,fresh.teams,options),/playable|every available/);
 });
