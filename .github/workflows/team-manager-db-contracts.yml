@@ -71,3 +71,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_roster_adjustments.sql
       - name: Test late arrival and departure roster changes without midgame interruption
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/roster_adjustments.sql
+      - name: Apply emergency-injury and appearance correction RPCs locally
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_emergency.sql
+      - name: Test in-game injury exception and organizer substitution correction
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/emergency.sql
