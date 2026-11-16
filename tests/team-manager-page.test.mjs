@@ -42,6 +42,8 @@ test("all Teams Manager organizer actions are named and accessible",()=>{
     "tm-draft-format","tm-distribution-summary",
     "tm-roster-adjust","tm-arrival-player","tm-arrival-team",
     "tm-replace-player","tm-assign-arrival",
+    "tm-transfer-correction","tm-transfer-correction-player",
+    "tm-transfer-correction-team","tm-transfer-correction-save",
     "tm-appearance-correction","tm-correct-game",
     "tm-incorrect-player","tm-correct-player",
     "tm-correct-appearance-save",
