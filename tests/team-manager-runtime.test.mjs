@@ -9,7 +9,7 @@ const page=fs.readFileSync(path.join(root,"index.html"),"utf8");
 const app=fs.readFileSync(path.join(root,"teams.mjs"),"utf8")
   .replace(/^import [^\n]*;\n/gm,"");
 
-async function boot({initialSnapshot,organizer=false}={}){
+async function boot({initialSnapshot,organizer=false,organizerRoster=[]}={}){
   const dom=new JSDOM(page,{
     url:"https://test.local/teams/",
     runScripts:"outside-only"
@@ -37,8 +37,8 @@ async function boot({initialSnapshot,organizer=false}={}){
     rpc:async(name,args)=>{
       calls.push({name,args});
       if(name==="tm_public_snapshot")return {data:snapshot,error:null};
-      if(name==="tm_org_roster"||name==="tm_org_stats")
-        return {data:[],error:null};
+      if(name==="tm_org_roster")return {data:organizerRoster,error:null};
+      if(name==="tm_org_stats")return {data:[],error:null};
       return {data:null,error:null};
     }
   };
@@ -221,4 +221,37 @@ test("organizer has correction control but anonymous visitors do not",async()=>{
     assert(admin.calls.some(c=>c.name==="tm_org_correct_winner"&&
       c.args?.p_winner_team_id==="team2"));
   }finally{admin.close();}
+});
+
+test("organizer replaces a departed roster player with a late arrival between games",async()=>{
+  const teams=makeTeams(6);
+  const snapshot={active:true,session_id:"session",format:6,revision:6,
+    rotation_id:"rot",rotation_status:"published",event_title:"Game day",teams,
+    games:[{id:"game1",round:1,court:1,status:"ready",
+      team_a_id:"team1",team_b_id:"team2",winner_team_id:null}]};
+  const t=await boot({initialSnapshot:snapshot,organizer:true,
+    organizerRoster:[
+      {id:"person1",name:"Person 1",email:"p1@example.com",
+        attendance:"departed",positions:[]},
+      {id:"late",name:"Late arrival",email:"late@example.com",
+        attendance:"present",positions:[]}
+    ]});
+  try{
+    const doc=t.dom.window.document;
+    assert(!doc.querySelector("#tm-roster-adjust").hidden);
+    const incoming=doc.querySelector("#tm-arrival-player");
+    const target=doc.querySelector("#tm-arrival-team");
+    assert(incoming.textContent.includes("Late arrival"));
+    incoming.value="late";
+    target.value="team1";
+    target.dispatchEvent(new t.dom.window.Event("change",{bubbles:true}));
+    const outgoing=doc.querySelector("#tm-replace-player");
+    assert(outgoing.textContent.includes("Person 1"));
+    outgoing.value="person1";
+    doc.querySelector("#tm-assign-arrival").click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_org_adjust_roster"&&
+      c.args?.p_in_player_id==="late"&&c.args?.p_out_player_id==="person1"&&
+      c.args?.p_team_id==="team1"));
+  }finally{t.close();}
 });
