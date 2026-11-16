@@ -185,6 +185,17 @@ begin
     raise exception 'Invalid available player or target team'
       using errcode='22023';
   end if;
+  -- A public transfer lasts the WHOLE rotation. Repeated public moves
+  -- would undermine player agreement and distort the actual team record.
+  -- Only an authenticated organizer can correct a mistaken transfer.
+  if exists (
+    select 1 from public.tm_transfers
+    where rotation_id=p_rotation_id
+      and session_player_id=p_session_player_id
+  ) then
+    raise exception 'Player already transferred in this rotation; ask an organizer to correct'
+      using errcode='22023';
+  end if;
   if exists (
     select 1 from public.tm_games g
     where g.rotation_id=p_rotation_id and g.status='playing'
@@ -225,6 +236,95 @@ begin
         'player_id',p_session_player_id,
         'from_team_id',v_from_team_id,'to_team_id',p_to_team_id));
 end $$;
+
+
+-- Organizer may correct a mistaken five-team transfer. A correction remains
+-- between games only; it is audited and is NOT a general mid-game reshuffle.
+create function public.tm_org_correct_transfer(
+  p_rotation_id uuid,p_session_player_id uuid,p_to_team_id uuid
+)
+returns void language plpgsql security definer set search_path=''
+as $
+declare
+  v_session public.tm_sessions%rowtype;
+  v_from_team uuid;
+  v_available_count integer;
+  v_format smallint;
+  v_count integer;
+begin
+  if auth.uid() is null or not exists(
+    select 1 from public.organizers where user_id=auth.uid()
+  ) then
+    raise exception 'Organizer access required' using errcode='42501';
+  end if;
+  select s.* into v_session
+  from public.tm_rotations r
+  join public.tm_sessions s on s.id=r.session_id
+  where r.id=p_rotation_id and r.status='published'
+    and s.status='active' for update of s;
+  if not found then
+    raise exception 'Rotation is no longer active' using errcode='22023';
+  end if;
+  select playing_format into v_format from public.tm_rotations
+    where id=p_rotation_id;
+  select count(*) into v_count from public.tm_teams
+    where rotation_id=p_rotation_id;
+  if v_count<>5 then
+    raise exception 'Transfer correction requires five teams' using errcode='22023';
+  end if;
+  if not exists(select 1 from public.tm_transfers
+    where rotation_id=p_rotation_id
+      and session_player_id=p_session_player_id) then
+    raise exception 'No transfer exists to correct' using errcode='22023';
+  end if;
+  select team_id into v_from_team from public.tm_memberships
+    where rotation_id=p_rotation_id and session_player_id=p_session_player_id;
+  if v_from_team is null or v_from_team=p_to_team_id
+    or not exists (
+      select 1 from public.tm_teams
+      where id=p_to_team_id and rotation_id=p_rotation_id
+    ) then
+    raise exception 'Invalid current team or correction target'
+      using errcode='22023';
+  end if;
+  if exists(
+    select 1 from public.tm_games
+    where rotation_id=p_rotation_id and status='playing'
+      and (v_from_team in (team_a_id,team_b_id)
+        or p_to_team_id in (team_a_id,team_b_id))
+  ) then
+    raise exception 'Cannot correct transfer while either team is playing'
+      using errcode='22023';
+  end if;
+  select count(*) into v_available_count
+  from public.tm_memberships m
+  join public.tm_session_players sp on sp.id=m.session_player_id
+  where m.rotation_id=p_rotation_id and m.team_id=v_from_team
+    and sp.attendance in ('present','waiting');
+  if v_available_count-1 < v_format then
+    raise exception 'Correction would leave the source team short'
+      using errcode='22023';
+  end if;
+  update public.tm_memberships set team_id=p_to_team_id
+    where rotation_id=p_rotation_id and session_player_id=p_session_player_id;
+  insert into public.tm_transfers(
+    rotation_id,session_id,session_player_id,from_team_id,to_team_id,
+    recorded_by
+  ) values (
+    p_rotation_id,v_session.id,p_session_player_id,
+    v_from_team,p_to_team_id,auth.uid()
+  );
+  update public.tm_sessions set revision=revision+1 where id=v_session.id;
+  insert into public.tm_action_audit(session_id,action,actor_user_id,details)
+    values(v_session.id,'correct_transfer',auth.uid(),jsonb_build_object(
+      'rotation_id',p_rotation_id,'player_id',p_session_player_id,
+      'from_team_id',v_from_team,'to_team_id',p_to_team_id));
+end $;
+
+revoke execute on function public.tm_org_correct_transfer(uuid,uuid,uuid)
+  from public,anon,authenticated;
+grant execute on function public.tm_org_correct_transfer(uuid,uuid,uuid)
+  to authenticated;
 
 revoke execute on function public.tm_public_record_sub(uuid,uuid,uuid)
   from public,anon,authenticated;
