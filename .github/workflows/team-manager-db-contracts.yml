@@ -83,3 +83,9 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_realtime.sql
       - name: Verify broadcast payload privacy and session invalidation behavior
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/realtime.sql
+      - name: Verify actual anon/authenticated Postgres role restrictions
+        run: bash db/tests/access_roles.sh
+      - name: Prepare active game for real two-connection concurrency tests
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/concurrency_setup.sql
+      - name: Race public game start and winner submission in independent connections
+        run: bash db/tests/concurrency.sh
