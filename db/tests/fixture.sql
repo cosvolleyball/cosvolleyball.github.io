@@ -1,6 +1,23 @@
 -- A minimal LOCAL-ONLY stand-in for the existing COS Volleyball project.
 -- No Supabase credentials, network access or production data needed.
 create schema auth;
+-- Local-only emulation of Supabase's managed Realtime Broadcast function.
+-- The sandbox records each message so we can assert it carries no private
+-- player attributes. This shim is never deployed to a hosted project.
+create schema realtime;
+create table realtime.tm_test_broadcast (
+  id bigint generated always as identity primary key,
+  payload jsonb not null,
+  event text not null,
+  topic text not null,
+  is_private boolean not null
+);
+create function realtime.send(
+  payload jsonb, event text, topic text, private boolean default true
+) returns void language sql as $$
+  insert into realtime.tm_test_broadcast(payload,event,topic,is_private)
+  values (payload,event,topic,private)
+$$;
 create role anon nologin;
 create role authenticated nologin;
 create function auth.uid() returns uuid language sql stable
