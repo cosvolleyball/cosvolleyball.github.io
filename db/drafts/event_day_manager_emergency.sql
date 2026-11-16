@@ -211,6 +211,32 @@ begin
         'team_id',v_wrong.team_id,'is_substitute',v_wrong.is_substitute));
 end $$;
 
+-- Organizer-only historical roster to correct an erroneous recorded
+-- participant without revealing completed-game appearance details publicly.
+create function public.tm_org_game_appearances(p_game_id uuid)
+returns jsonb language plpgsql stable security definer set search_path=''
+as $
+declare
+  v_result jsonb;
+begin
+  if auth.uid() is null or not exists(
+    select 1 from public.organizers where user_id=auth.uid()
+  ) then
+    raise exception 'Organizer access required' using errcode='42501';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'player_id',sp.id,'name',sp.display_name,
+    'team_id',a.team_id,'is_substitute',a.is_substitute,
+    'active_on_court',a.active_on_court
+  ) order by sp.display_name,sp.id),'[]'::jsonb)
+  into v_result
+  from public.tm_game_appearances a
+  join public.tm_session_players sp on sp.id=a.session_player_id
+  join public.tm_games g on g.id=a.game_id
+  where a.game_id=p_game_id and g.status in ('playing','completed');
+  return coalesce(v_result,'[]'::jsonb);
+end $;
+
 revoke execute on function public.tm_public_game_lineup(uuid)
   from public,anon,authenticated;
 revoke execute on function public.tm_public_emergency_sub(uuid,uuid,uuid)
@@ -222,4 +248,8 @@ grant execute on function public.tm_public_game_lineup(uuid)
 grant execute on function public.tm_public_emergency_sub(uuid,uuid,uuid)
   to anon,authenticated;
 grant execute on function public.tm_org_correct_appearance(uuid,uuid,uuid)
+  to authenticated;
+revoke execute on function public.tm_org_game_appearances(uuid)
+  from public,anon,authenticated;
+grant execute on function public.tm_org_game_appearances(uuid)
   to authenticated;
