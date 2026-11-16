@@ -2861,3 +2861,20 @@ body.organizer-view .site-nav .nav-organizer {
   .phase10-access-form{grid-template-columns:minmax(0,1fr)}
   .phase10-access-form label:has(textarea){grid-column:auto}
 }
+
+/* Phase 11: calendar choices are clear, keyboard-accessible and wrap on phones. */
+.registration-calendar {
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--body);
+}
+.registration-calendar-heading { margin: 0 0 10px; }
+.registration-calendar-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.registration-calendar-actions > .button { flex: 1 1 165px; min-height: 44px; text-align: center; }
+.registration-calendar .small { margin: 10px 0 0; }
+@media (max-width: 420px) {
+  .registration-calendar-actions { flex-direction: column; }
+  .registration-calendar-actions > .button { flex: none; width: 100%; }
+}
