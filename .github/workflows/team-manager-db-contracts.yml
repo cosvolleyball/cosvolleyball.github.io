@@ -89,3 +89,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/concurrency_setup.sql
       - name: Race public game start and winner submission in independent connections
         run: bash db/tests/concurrency.sh
+      - name: Prepare five-team public transfer race in disposable database
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/concurrency_transfer_setup.sql
+      - name: Ensure independent public transfer requests cannot move the same player twice
+        run: bash db/tests/concurrency_transfer.sh
