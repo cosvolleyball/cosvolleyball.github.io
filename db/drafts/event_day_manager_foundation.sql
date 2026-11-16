@@ -482,6 +482,8 @@ begin
     'session_id',v_session.id,
     'event_title',v_title,
     'format',coalesce(v_rotation_format,v_session.format),
+    'allowed_formats',case when v_session.event_visibility='private'
+      then jsonb_build_array(4,6) else jsonb_build_array(4,5,6) end,
     'revision',v_session.revision,
     'rotation_id',v_rotation,
     'rotation_status',v_rotation_status,
