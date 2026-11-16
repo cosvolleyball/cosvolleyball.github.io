@@ -145,6 +145,28 @@
           </div>
         </section>
 
+        <section id="tm-transfer-correction" class="tm-panel"
+          aria-labelledby="tm-transfer-correction-title" hidden>
+          <h3 id="tm-transfer-correction-title">Correct a five-team transfer</h3>
+          <p>Public transfers can be recorded once per player per rotation.
+            An organizer may correct a mistaken assignment between games,
+            without changing already recorded game appearances.</p>
+          <div class="tm-form tm-inline">
+            <label>Previously transferred player
+              <select id="tm-transfer-correction-player">
+                <option value="">Choose transferred player…</option>
+              </select>
+            </label>
+            <label>Correct team
+              <select id="tm-transfer-correction-team">
+                <option value="">Choose team…</option>
+              </select>
+            </label>
+            <button type="button" id="tm-transfer-correction-save"
+              class="tm-button tm-secondary">Correct transfer</button>
+          </div>
+        </section>
+
         <section id="tm-appearance-correction" class="tm-panel"
           aria-labelledby="tm-correct-appearance-title" hidden>
           <h3 id="tm-correct-appearance-title">Correct a recorded participant</h3>
