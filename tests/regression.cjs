@@ -80,7 +80,7 @@ const results = [];
         /^import[\s\S]*?;\n/,
         "const createClient=()=>window.fakeSupabase;\n",
       ) +
-        "\nwindow.testing={emailProblem,esc,calculatedEventTimes,selectedDurationMinutes,eventCard,eventDetailPage,fetchAllFinanceTransactions,renderFinances,loadAdminEvents,refreshAdmin,loadFinance,loadEvents,loadInvitedEvent,loadPhase8EventAudit,editEvent,setOrganizer:v=>isOrganizer=v,setFinance:(h,t)=>{financeHosts=h;financeTransactions=t}};",
+        "\nwindow.testing={emailProblem,esc,calculatedEventTimes,selectedDurationMinutes,eventCard,eventDetailPage,fetchAllFinanceTransactions,renderFinances,loadAdminEvents,refreshAdmin,loadFinance,loadEvents,loadInvitedEvent,loadPhase8EventAudit,editEvent,openDuplicateEventEditor,setOrganizer:v=>isOrganizer=v,setFinance:(h,t)=>{financeHosts=h;financeTransactions=t}};",
     );
     await new Promise((r) => setTimeout(r, 20));
   }
@@ -461,6 +461,124 @@ const results = [];
       true,
     );
   });
+
+
+  // Phase 11: the same organizer event editor must create a NEW draft, not
+  // silently edit, publish, or copy confidential details from the source.
+  await test("Duplicate button opens a new draft from an organizer event", async () => {
+    await boot("?dashboard=1");
+    assert.equal(
+      await page.evaluate(async () => {
+        window.sourceEvent = {
+          id: "source-event", title: "Thursday Open Gym",
+          venue: "Hillside Community Center",
+          starts_at: "2027-01-07T01:00:00.000Z",
+          ends_at: "2027-01-07T04:45:00.000Z",
+          price_cents: 750, capacity: 18,
+          payment_instructions: "Venmo: @Example",
+          host_name: "Organizer", status: "published", visibility: "private",
+          description: "Bring indoor shoes.",
+          invite_token: "must-not-copy-me"
+        };
+        const dialog = document.getElementById("event-editor-dialog");
+        dialog.showModal = function () { this.setAttribute("open", ""); };
+        dialog.close = function () { this.removeAttribute("open"); };
+        testing.setOrganizer(true);
+        window.queryHandler = q => q.table === "events"
+          ? { data: [window.sourceEvent], error: null }
+          : { data: [], error: null };
+        await testing.loadAdminEvents();
+        const button = document.querySelector('[data-duplicate="source-event"]');
+        if (!button) return false;
+        window.calls = [];
+        button.click();
+        return dialog.hasAttribute("open") &&
+          document.getElementById("editor-heading").textContent === "Duplicate event" &&
+          !document.getElementById("event-duplicate-hint").hidden &&
+          window.calls.every(q => !q.table || !q.ops.some(op => ["insert", "update", "delete"].includes(op[0])));
+      }),
+      true
+    );
+  });
+  await test("Duplicating copies settings but not identity, date or published status", async () =>
+    assert.equal(
+      await page.evaluate(() => {
+        const get = id => document.getElementById(id).value;
+        return get("edit-id") === "" &&
+          get("event-date") === "" &&
+          get("event-title") === "Thursday Open Gym" &&
+          get("event-venue") === "Hillside Community Center" &&
+          get("event-price") === "7.50" &&
+          get("event-capacity") === "18" &&
+          get("payment-instructions") === "Venmo: @Example" &&
+          get("event-host") === "Organizer" &&
+          get("event-visibility") === "private" &&
+          get("event-status") === "draft" &&
+          get("event-description") === "Bring indoor shoes." &&
+          get("event-hour") === "18" &&
+          get("event-minute") === "00" &&
+          get("event-duration") === "custom" &&
+          get("event-duration-custom") === "225" &&
+          document.getElementById("event-date").required &&
+          document.activeElement.id === "event-date";
+      }),
+      true
+    ));
+  await test("A duplicated event cannot save until a new date is chosen", async () =>
+    assert.equal(
+      await page.evaluate(async () => {
+        window.calls = [];
+        document.getElementById("event-form").dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise(r => setTimeout(r, 0));
+        return document.getElementById("event-save-message").textContent.includes("Choose an event date") &&
+          window.calls.every(q => !q.table || !q.ops.some(op => ["insert", "update", "delete"].includes(op[0])));
+      }),
+      true
+    ));
+  await test("Saving a duplicate INSERTs one new draft without source ID, token or registrations", async () =>
+    assert.equal(
+      await page.evaluate(async () => {
+        window.calls = [];
+        window.queryHandler = q => {
+          const insert = q.table === "events" && q.ops.find(op => op[0] === "insert");
+          if (insert) return { data: { ...insert[1], id: "new-event" }, error: null };
+          if (q.table === "events") return { data: [window.sourceEvent], error: null };
+          return { data: [], error: null };
+        };
+        document.getElementById("event-date").value = "2027-02-04";
+        document.getElementById("event-form").dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true })
+        );
+        await new Promise(r => setTimeout(r, 40));
+        const writes = window.calls.filter(q => q.table && q.ops.some(op => ["insert", "update", "delete"].includes(op[0])));
+        const operation = writes[0]?.ops.find(op => op[0] === "insert");
+        const payload = operation?.[1] || {};
+        return writes.length === 1 && !!operation &&
+          payload.title === window.sourceEvent.title &&
+          payload.starts_at === new Date("2027-02-05T01:00:00.000Z").toISOString() &&
+          payload.status === "draft" && payload.visibility === "private" &&
+          !("id" in payload) && !("invite_token" in payload) &&
+          !("registrations" in payload) && !("payment_status" in payload) &&
+          document.getElementById("edit-id").value === "" &&
+          document.getElementById("event-duplicate-hint").hidden;
+      }),
+      true
+    ));
+  await test("New-event editor resets duplicate mode and unauthenticated users cannot duplicate", async () =>
+    assert.equal(
+      await page.evaluate(() => {
+        document.getElementById("create-event").click();
+        const normal = document.getElementById("editor-heading").textContent === "Create an event" &&
+          document.getElementById("event-duplicate-hint").hidden;
+        document.getElementById("event-editor-dialog").close();
+        testing.setOrganizer(false);
+        testing.openDuplicateEventEditor(window.sourceEvent);
+        return normal && !document.getElementById("event-editor-dialog").hasAttribute("open");
+      }),
+      true
+    ));
 
   dom.window.close();
   if (process.env.REGRESSION_RESULTS)
