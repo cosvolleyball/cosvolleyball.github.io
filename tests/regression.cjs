@@ -80,7 +80,7 @@ const results = [];
         /^import[\s\S]*?;\n/,
         "const createClient=()=>window.fakeSupabase;\n",
       ) +
-        "\nwindow.testing={emailProblem,esc,calculatedEventTimes,selectedDurationMinutes,eventCard,eventDetailPage,fetchAllFinanceTransactions,renderFinances,loadAdminEvents,refreshAdmin,loadFinance,loadEvents,loadInvitedEvent,loadPhase8EventAudit,editEvent,openDuplicateEventEditor,calendarUtc,calendarEventDetails,googleCalendarLink,createIcsCalendar,configureRegistrationCalendar,setOrganizer:v=>isOrganizer=v,setFinance:(h,t)=>{financeHosts=h;financeTransactions=t}};",
+        "\nwindow.testing={emailProblem,esc,calculatedEventTimes,selectedDurationMinutes,eventCard,eventDetailPage,fetchAllFinanceTransactions,renderFinances,loadAdminEvents,refreshAdmin,loadFinance,loadEvents,loadInvitedEvent,loadPhase8EventAudit,editEvent,openDuplicateEventEditor,openSignup,phase9RosterRow,phase9RosterPanel,calendarUtc,calendarEventDetails,googleCalendarLink,createIcsCalendar,configureRegistrationCalendar,setOrganizer:v=>isOrganizer=v,setFinance:(h,t)=>{financeHosts=h;financeTransactions=t}};",
     );
     await new Promise((r) => setTimeout(r, 20));
   }
@@ -692,6 +692,126 @@ const results = [];
         document.getElementById("calendar-download").click();
         return created===1 && filename==="cos-volleyball-event.ics";
       }),
+      true
+    ));
+
+
+  // Phase 11 accessibility: validate the DOM contract that makes keyboard and
+  // assistive-technology navigation possible. CSS layout still needs manual QA.
+  await test("Public and organizer views expose working skip links and landmarks", async () => {
+    await boot();
+    assert.equal(
+      await page.evaluate(() => {
+        const pub = document.querySelector(".skip-public");
+        const org = document.querySelector(".skip-organizer");
+        return pub?.getAttribute("href")==="#main-content" &&
+          org?.getAttribute("href")==="#admin" &&
+          document.getElementById("main-content")?.tagName==="MAIN" &&
+          document.getElementById("admin")?.tabIndex===-1 &&
+          document.getElementById("main-content")?.tabIndex===-1;
+      }), true
+    );
+  });
+  await test("Registration and success dialogs have programmatic names and descriptions", async () =>
+    assert.equal(
+      await page.evaluate(() => {
+        const signup = document.getElementById("signup-dialog");
+        const success = document.getElementById("registration-success-dialog");
+        const editor = document.getElementById("event-editor-dialog");
+        return signup.getAttribute("aria-labelledby")==="signup-title" &&
+          signup.getAttribute("aria-describedby")==="signup-summary" &&
+          success.getAttribute("aria-labelledby")==="registration-success-title" &&
+          success.getAttribute("aria-describedby")==="registration-success-description" &&
+          document.getElementById("registration-success-title").tabIndex===-1 &&
+          editor.getAttribute("aria-labelledby")==="editor-heading";
+      }), true
+    ));
+  await test("Organizer tabs support keyboard arrows, Home and End with correct aria state", async () => {
+    await boot("?dashboard=1");
+    assert.equal(
+      await page.evaluate(() => {
+        testing.setOrganizer(true);
+        const events = document.getElementById("dashboard-tab-events");
+        const finance = document.getElementById("dashboard-tab-finance");
+        const press = key => document.activeElement.dispatchEvent(new KeyboardEvent("keydown",{
+          key, bubbles:true, cancelable:true
+        }));
+        if(events.getAttribute("role")!=="tab" || finance.getAttribute("role")!=="tab") return false;
+        if(events.tabIndex!==0 || finance.tabIndex!==-1) return false;
+        events.focus();
+        press("ArrowRight");
+        const next = document.activeElement===finance &&
+          finance.getAttribute("aria-selected")==="true" &&
+          events.getAttribute("aria-selected")==="false" &&
+          finance.tabIndex===0 && events.tabIndex===-1 &&
+          document.getElementById("dashboard-events-pane").hidden &&
+          !document.getElementById("dashboard-finance-pane").hidden;
+        press("Home");
+        const back = document.activeElement===events &&
+          events.getAttribute("aria-selected")==="true" &&
+          events.tabIndex===0 && finance.tabIndex===-1 &&
+          !document.getElementById("dashboard-events-pane").hidden &&
+          document.getElementById("dashboard-finance-pane").hidden;
+        press("End");
+        press("ArrowRight");
+        return next && back && document.activeElement===events;
+      }), true
+    );
+  });
+  await test("Roster and finance action buttons identify their specific record", async () =>
+    assert.equal(
+      await page.evaluate(() => {
+        const p = testing.phase9RosterRow({
+          id: "registration-7", player_name: "Alex & Sam",
+          player_email: "a@example.com",
+          registration_status: "registered",
+          payment_status: "unpaid",
+          payment_method: "cash",
+          attendance_status: "not_marked"
+        });
+        const table = testing.phase9RosterPanel(
+          {id:"event-7",title:"Friday & Friends",price_cents:500},
+          [{id:"registration-7",player_name:"Alex",player_email:"a@example.com",registration_status:"registered",payment_status:"unpaid",payment_method:"cash",attendance_status:"not_marked"}]
+        );
+        return p.includes('aria-label="Cancel registration for Alex &amp; Sam"') &&
+          table.includes('aria-label="Check-in and payment roster for Friday &amp; Friends"') &&
+          table.includes('<th scope="col">Payment</th>');
+      }), true
+    ));
+  await test("Registration opens with focus on name, and success status receives focus", async () => {
+    await boot();
+    assert.equal(
+      await page.evaluate(async () => {
+        const event = {
+          id:"event-focus",title:"Sunday Volleyball",venue:"Gym",
+          starts_at:"2027-01-01T00:00:00Z",ends_at:"2027-01-01T03:00:00Z",
+          price_cents:500,capacity:20,spots_remaining:9,visibility:"public"
+        };
+        window.reply.public_open_gym_events={data:[event],error:null};
+        window.reply.register_for_open_gym={data:{status:"registered"},error:null};
+        document.getElementById("signup-dialog").showModal = function(){this.open=true;};
+        document.getElementById("signup-dialog").close = function(){this.open=false;};
+        document.getElementById("registration-success-dialog").showModal = function(){this.open=true;};
+        await testing.loadEvents();
+        testing.openSignup(event.id);
+        if(document.activeElement.id!=="player-name") return false;
+        document.getElementById("player-name").value="Test Player";
+        document.getElementById("player-email").value="a@example.com";
+        document.getElementById("signup-form").dispatchEvent(
+          new Event("submit",{bubbles:true,cancelable:true})
+        );
+        await new Promise(resolve=>setTimeout(resolve,20));
+        return document.activeElement.id==="registration-success-title";
+      }), true
+    );
+  });
+  await test("Responsive CSS preserves table headings and minimum touch sizes", async () =>
+    assert.equal(
+      fs.readFileSync(path.join(root,"styles.css"),"utf8").includes(
+        ".phase9-roster thead {\n    display: table-header-group;"
+      ) && fs.readFileSync(path.join(root,"styles.css"),"utf8").includes(
+        ".editor-dialog-close {\n  width: 44px;\n  height: 44px;"
+      ),
       true
     ));
 
