@@ -20,6 +20,10 @@ declare
   v_size integer;
 begin
   if has_function_privilege('anon',
+    'public.tm_org_transfers(uuid)','execute') then
+    raise exception 'Anonymous role can read private transfer history';
+  end if;
+  if has_function_privilege('anon',
     'public.tm_org_correct_transfer(uuid,uuid,uuid)','execute') then
     raise exception 'Anonymous transfer correction is allowed';
   end if;
@@ -191,6 +195,9 @@ begin
     raise exception 'Repeated public transfer changed the original agreement';
   exception when sqlstate '22023' then null;
   end;
+  if jsonb_array_length(public.tm_org_transfers(v_rotation))<>1 then
+    raise exception 'Transferred player missing from private organizer history';
+  end if;
   perform public.tm_org_correct_transfer(v_rotation,v_sub,v_team1);
   if (select team_id from public.tm_memberships
     where rotation_id=v_rotation and session_player_id=v_sub)<>v_team1 then
