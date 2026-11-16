@@ -15,6 +15,7 @@ const state = {
   roster: [],
   stats: [],
   priorTeammates: [],
+  transferHistory: [],
   events: [],
   draft: null,
   savedDraftId: null,
@@ -591,6 +592,31 @@ function updateRotationChoices(resetFormat = false) {
   if(choice?.format===4)$("tm-draft-balance-positions").checked=false;
   if(!choice)$("tm-generate").disabled=true;
 }
+function renderTransferCorrection() {
+  const el=$("tm-transfer-correction");
+  const snap=state.snapshot;
+  const transfers=state.transferHistory;
+  const visible=Boolean(snap?.active &&
+    snap.rotation_status==="published" && snap.teams?.length===5 &&
+    transfers.length);
+  el.hidden=!visible;
+  if(!visible)return;
+  const player=$("tm-transfer-correction-player");
+  const team=$("tm-transfer-correction-team");
+  const prevPlayer=player.value,prevTeam=team.value;
+  player.innerHTML='<option value="">Choose transferred player…</option>'+
+    transfers.map(p=>`<option value="${escapeHtml(p.player_id)}">
+      ${escapeHtml(p.name)} (now on ${escapeHtml(
+        teamName(snap.teams,p.current_team_id))})
+    </option>`).join("");
+  team.innerHTML='<option value="">Choose team…</option>'+
+    snap.teams.map(t=>`<option value="${escapeHtml(t.id)}">
+      ${escapeHtml(t.label)}
+    </option>`).join("");
+  if(transfers.some(p=>p.player_id===prevPlayer))player.value=prevPlayer;
+  if(snap.teams.some(t=>t.id===prevTeam))team.value=prevTeam;
+}
+
 function renderOrganizer() {
   if(!state.isOrganizer)return;
   const active=Boolean(state.snapshot?.active);
@@ -608,19 +634,25 @@ function renderOrganizer() {
   renderDraft();
   renderRosterAdjust();
   renderAppearanceCorrection();
+  renderTransferCorrection();
 }
 async function loadPrivate() {
   const session=state.snapshot?.session_id;
   if(!session || !state.isOrganizer)return;
-  const [roster,stats,remote,pairs] = await Promise.all([
+  const [roster,stats,remote,pairs,transfers] = await Promise.all([
     rpc("tm_org_roster",{p_session_id:session}),
     rpc("tm_org_stats",{p_session_id:session}),
     rpc("tm_org_draft",{p_session_id:session}),
-    rpc("tm_org_teammate_pairs",{p_session_id:session})
+    rpc("tm_org_teammate_pairs",{p_session_id:session}),
+    state.snapshot.rotation_status==="published" &&
+      state.snapshot.teams?.length===5
+      ? rpc("tm_org_transfers",{p_rotation_id:state.snapshot.rotation_id})
+      : Promise.resolve([])
   ]);
   state.roster=Array.isArray(roster)?roster:[];
   state.stats=Array.isArray(stats)?stats:[];
   state.priorTeammates=Array.isArray(pairs)?pairs:[];
+  state.transferHistory=Array.isArray(transfers)?transfers:[];
   if(remote && (!state.draft || state.savedDraftId)){
     state.draft={teams:remote.teams,qualityScore:null,
       playingFormat:remote.playing_format};
@@ -854,6 +886,20 @@ $("tm-walkin-form").addEventListener("submit",e=>{e.preventDefault();void action
   feedback("Walk-in added and checked in.");
   await refresh(true);
 });});
+$("tm-transfer-correction-save").addEventListener("click",()=>void action(async()=>{
+  const playerId=$("tm-transfer-correction-player").value;
+  const target=$("tm-transfer-correction-team").value;
+  if(!playerId||!target)
+    throw new Error("Choose a previously transferred player and the correct team.");
+  if(!window.confirm("Correct this player's team until the next reshuffle? Only possible between games."))return;
+  await rpc("tm_org_correct_transfer",{
+    p_rotation_id:state.snapshot.rotation_id,
+    p_session_player_id:playerId,
+    p_to_team_id:target
+  });
+  feedback("Player transfer corrected. Previous game appearances remain unchanged.");
+  await refresh(true);
+}));
 $("tm-correct-game").addEventListener("change",()=>void action(loadCorrectionGame));
 $("tm-incorrect-player").addEventListener("change",updateCorrectionCandidateOptions);
 $("tm-correct-appearance-save").addEventListener("click",()=>void action(async()=>{
