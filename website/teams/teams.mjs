@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { generateBalancedTeams } from "./balancing.mjs";
+import { generateBalancedTeams, scoreBalancedDraft } from "./balancing.mjs";
 
 // Public publishable browser credentials, matching the main site's client.
 // Never embed service_role credentials or privileged data in this module.
@@ -254,8 +254,10 @@ function renderDraft() {
   }
   const lookup = new Map(state.roster.map(p=>[p.id,p]));
   host.innerHTML = `<p class="tm-muted">Private draft — ${state.savedDraftId?"saved, not published":"unsaved preview"}.
-      ${state.draft?.qualityScore===null?"Balance score requires recalculation after manual edits.":
-      "Initial balance score: " + escapeHtml(state.draft?.qualityScore ?? "N/A")} </p>
+      ${state.draft?.qualityScore===null?"Balance score not yet recalculated.":
+      "Current balance score (lower is better): " + escapeHtml(state.draft?.qualityScore ?? "N/A")}
+      ${Number.isFinite(state.draft?.initialScore) ?
+      " · Initial score: " + escapeHtml(state.draft.initialScore) : ""}</p>
     <div class="tm-team-grid">
     ${teams.map((team,teamIndex)=>`<article class="tm-team">
       <h4>Team ${team.seed} <small>(${team.playerIds.length} players)</small></h4>
@@ -282,6 +284,27 @@ function renderDraft() {
     </article>`).join("")}</div>`;
 }
 
+function scoreCurrentDraft() {
+  if(!state.draft)return;
+  const byEmail=new Map(state.stats.map(p=>[p.email,Number(p.regular_games)||0]));
+  const available=state.roster.filter(p=>
+    ["present","waiting"].includes(p.attendance));
+  const players=available.map(p=>({
+    id:p.id,skill:p.skill,gender:p.gender,positions:p.positions,
+    regularGames:byEmail.get(p.email)||0
+  }));
+  const settings=state.draft.appliedOptions||{
+    balanceSkill:$("tm-draft-balance-skill").checked,
+    balanceGender:$("tm-draft-balance-gender").checked,
+    balancePositions:$("tm-draft-balance-positions").checked
+  };
+  state.draft.qualityScore=scoreBalancedDraft(players,state.draft.teams,{
+    ...settings,
+    teamCount:state.draft.teams.length,
+    format:Number(state.snapshot.format),
+    priorTeammates:state.priorTeammates
+  });
+}
 function rememberEdit() {
   state.undoStack.push(JSON.parse(JSON.stringify(state.draft.teams)));
   if (state.undoStack.length>30) state.undoStack.shift();
@@ -311,6 +334,7 @@ function editDraft(type,playerId,targetId) {
     source.playerIds.splice(sourceIndex,1);
     destination.playerIds.push(playerId);
   }
+  scoreCurrentDraft();
   renderDraft();
 }
 function renderEventPicker() {
@@ -651,6 +675,7 @@ $("tm-generate").addEventListener("click",()=>void action(async()=>{
     id:p.id,skill:p.skill,gender:p.gender,positions:p.positions,
     regularGames:byEmail.get(p.email)||0
   })),opts);
+  state.draft.initialScore=state.draft.qualityScore;
   state.undoStack=[];state.savedDraftId=null;
   feedback("New private team preview generated. Review before publishing.");
   renderDraft();
@@ -674,7 +699,7 @@ $("tm-draft").addEventListener("click",e=>{
 $("tm-undo").addEventListener("click",()=>{
   if(!state.undoStack.length||!state.draft)return;
   state.draft.teams=state.undoStack.pop();
-  state.draft.qualityScore=null;
+  scoreCurrentDraft();
   invalidateSavedDraft();
   renderDraft();
 });
