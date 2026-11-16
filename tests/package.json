@@ -2,7 +2,7 @@
   "name": "cos-volleyball-regression-tests",
   "private": true,
   "scripts": {
-    "test": "node regression.cjs"
+    "test": "node regression.cjs && node --test team-scheduling.test.mjs"
   },
   "devDependencies": {
     "jsdom": "31.0.1"
