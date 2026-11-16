@@ -93,6 +93,16 @@ function gameControls(g, teams, session) {
           t.id!==g.team_a_id && t.id!==g.team_b_id)
       : null;
     const activeLineup=session.liveLineups?.[g.id]||[];
+    const ordinaryRotations=[g.team_a_id,g.team_b_id].flatMap(id=>{
+      const team=teams.find(t=>t.id===id);
+      if(!team)return [];
+      const current=activeLineup.filter(p=>p.team_id===id&&!p.is_substitute);
+      const sitting=(team.players||[]).filter(p=>
+        !activeLineup.some(l=>l.player_id===p.id));
+      return current.length&&sitting.length ? [{
+        team,current,sitting
+      }] : [];
+    });
     return `<div class="tm-game-actions">
       <label>Winner<select data-report-winner="${escapeHtml(g.id)}">
         <option value="">Select winner…</option>
@@ -101,6 +111,22 @@ function gameControls(g, teams, session) {
       </select></label>
       <button type="button" class="tm-button"
         data-tm-game-action="winner" data-game-id="${escapeHtml(g.id)}">Report winner</button>
+      ${ordinaryRotations.map(option=>`<div class="tm-sub-form">
+        <strong>${escapeHtml(option.team.label)} — rotate a teammate into this game</strong>
+        <label>Player leaving court<select data-rotate-out="${escapeHtml(g.id)}-${escapeHtml(option.team.id)}">
+          <option value="">Choose player…</option>
+          ${option.current.map(p=>`<option value="${escapeHtml(p.player_id)}">${escapeHtml(p.name)}</option>`).join("")}
+        </select></label>
+        <label>Teammate entering<select data-rotate-in="${escapeHtml(g.id)}-${escapeHtml(option.team.id)}">
+          <option value="">Choose player…</option>
+          ${option.sitting.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
+        </select></label>
+        <button type="button" class="tm-button tm-secondary"
+          data-tm-game-action="rotate-teammate" data-game-id="${escapeHtml(g.id)}"
+          data-team-id="${escapeHtml(option.team.id)}">
+          Record teammate rotation
+        </button>
+      </div>`).join("")}
       ${resting && activeLineup.length ? `<div class="tm-sub-form">
         <strong>Emergency injury substitution (six-team games only)</strong>
         <label>Player leaving court
@@ -619,13 +645,13 @@ async function refresh(forcePrivate = false) {
         snapshot.pendingSubs = Object.fromEntries(
           rows.map(row=>[row.id,Array.isArray(row.subs)?row.subs:[]])
         );
-        const lineups = await Promise.all(playing.map(async g=>({
-          id:g.id,players:await rpc("tm_public_game_lineup",{p_game_id:g.id})
-        })));
-        snapshot.liveLineups=Object.fromEntries(
-          lineups.map(row=>[row.id,Array.isArray(row.players)?row.players:[]])
-        );
       }
+      const lineups = await Promise.all(playing.map(async g=>({
+        id:g.id,players:await rpc("tm_public_game_lineup",{p_game_id:g.id})
+      })));
+      snapshot.liveLineups=Object.fromEntries(
+        lineups.map(row=>[row.id,Array.isArray(row.players)?row.players:[]])
+      );
     }
     // Avoid resetting a user's form selections on every automatic poll.
     const before = state.snapshot;
@@ -728,6 +754,19 @@ $("tm-public-content").addEventListener("click",e=>{
         p_game_id:gameId,p_session_player_id:player
       });
       feedback("Planned substitute removed.");
+    }else if(name==="rotate-teammate"){
+      if(!game || game.status!=="playing")
+        throw new Error("Game is not in progress.");
+      const identifier=gameId+"-"+btn.dataset.teamId;
+      const outgoing=document.querySelector('[data-rotate-out="'+identifier+'"]')?.value;
+      const incoming=document.querySelector('[data-rotate-in="'+identifier+'"]')?.value;
+      if(!outgoing||!incoming)
+        throw new Error("Choose the player leaving and teammate entering.");
+      if(!window.confirm("Record a regular in-game teammate rotation? Both players count as having participated."))return;
+      await rpc("tm_public_rotate_teammate",{
+        p_game_id:gameId,p_out_player_id:outgoing,p_in_player_id:incoming
+      });
+      feedback("Teammate rotation recorded as regular game participation.");
     }else if(name==="emergency"){
       if(!game || game.status!=="playing")
         throw new Error("Game is no longer in progress.");
