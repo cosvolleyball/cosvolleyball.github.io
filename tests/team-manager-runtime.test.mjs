@@ -9,7 +9,8 @@ const page=fs.readFileSync(path.join(root,"index.html"),"utf8");
 const app=fs.readFileSync(path.join(root,"teams.mjs"),"utf8")
   .replace(/^import [^\n]*;\n/gm,"");
 
-async function boot({initialSnapshot,organizer=false,organizerRoster=[]}={}){
+async function boot({initialSnapshot,organizer=false,organizerRoster=[],
+  lineupByGame={},organizerAppearances={}}={}){
   const dom=new JSDOM(page,{
     url:"https://test.local/teams/",
     runScripts:"outside-only"
@@ -38,6 +39,10 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[]}={}){
       calls.push({name,args});
       if(name==="tm_public_snapshot")return {data:snapshot,error:null};
       if(name==="tm_org_roster")return {data:organizerRoster,error:null};
+      if(name==="tm_public_game_lineup")
+        return {data:lineupByGame[args?.p_game_id]||[],error:null};
+      if(name==="tm_org_game_appearances")
+        return {data:organizerAppearances[args?.p_game_id]||[],error:null};
       if(name==="tm_org_stats")return {data:[],error:null};
       return {data:null,error:null};
     }
@@ -254,4 +259,63 @@ test("organizer replaces a departed roster player with a late arrival between ga
       c.args?.p_in_player_id==="late"&&c.args?.p_out_player_id==="person1"&&
       c.args?.p_team_id==="team1"));
   }finally{t.close();}
+});
+
+test("six-team emergency injury sub replaces an active participant",async()=>{
+  const teams=makeTeams(6);
+  const t=await boot({initialSnapshot:{
+    active:true,session_id:"session",format:6,revision:3,
+    rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams,
+    games:[{id:"game1",round:1,court:1,status:"playing",
+      team_a_id:"team1",team_b_id:"team2",winner_team_id:null}]
+  },lineupByGame:{game1:[
+    {player_id:"person1",name:"Person 1",team_id:"team1",is_substitute:false},
+    {player_id:"person2",name:"Person 2",team_id:"team2",is_substitute:false}
+  ]}});
+  try{
+    const doc=t.dom.window.document;
+    doc.querySelector('[data-emergency-out="game1"]').value="person1";
+    doc.querySelector('[data-emergency-in="game1"]').value="person3";
+    doc.querySelector('[data-tm-game-action="emergency"]').click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_public_emergency_sub"&&
+      c.args?.p_out_player_id==="person1"&&
+      c.args?.p_in_player_id==="person3"));
+  }finally{t.close();}
+});
+
+test("organizer participant correction uses a private RPC and never appears publicly",async()=>{
+  const teams=makeTeams(6);
+  teams[0].players.push({id:"person1b",name:"Second Team 1 Player"});
+  const snapshot={active:true,session_id:"session",format:6,revision:3,
+    rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams,
+    games:[{id:"game1",round:1,court:1,status:"completed",
+      team_a_id:"team1",team_b_id:"team2",winner_team_id:"team1"}]};
+  const anon=await boot({initialSnapshot:snapshot});
+  try{
+    assert(anon.dom.window.document.querySelector("#tm-organizer").hidden);
+    assert(!anon.calls.some(c=>c.name==="tm_org_game_appearances"));
+  }finally{anon.close();}
+  const admin=await boot({initialSnapshot:snapshot,organizer:true,
+    organizerAppearances:{game1:[
+      {player_id:"person1",name:"Person 1",team_id:"team1",is_substitute:false},
+      {player_id:"person2",name:"Person 2",team_id:"team2",is_substitute:false}
+    ]}});
+  try{
+    const doc=admin.dom.window.document;
+    assert(!doc.querySelector("#tm-appearance-correction").hidden);
+    doc.querySelector("#tm-correct-game").value="game1";
+    doc.querySelector("#tm-correct-game").dispatchEvent(
+      new admin.dom.window.Event("change",{bubbles:true}));
+    await pause();
+    doc.querySelector("#tm-incorrect-player").value="person1";
+    doc.querySelector("#tm-incorrect-player").dispatchEvent(
+      new admin.dom.window.Event("change",{bubbles:true}));
+    doc.querySelector("#tm-correct-player").value="person1b";
+    doc.querySelector("#tm-correct-appearance-save").click();
+    await pause();
+    assert(admin.calls.some(c=>c.name==="tm_org_correct_appearance"&&
+      c.args?.p_wrong_player_id==="person1"&&
+      c.args?.p_correct_player_id==="person1b"));
+  }finally{admin.close();}
 });
