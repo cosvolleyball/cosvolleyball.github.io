@@ -144,9 +144,9 @@ begin
   if not found then
     raise exception 'No active session for this game' using errcode='22023';
   end if;
-  select g.*,r.status into v_game,v_rotation_status
-  from public.tm_games g join public.tm_rotations r on r.id=g.rotation_id
-  where g.id=p_game_id;
+  select * into v_game from public.tm_games where id=p_game_id;
+  select status into v_rotation_status from public.tm_rotations
+    where id=v_game.rotation_id;
   if v_rotation_status<>'published' then
     raise exception 'Rotation is not published' using errcode='22023';
   end if;
