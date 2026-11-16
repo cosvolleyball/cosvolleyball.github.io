@@ -323,3 +323,54 @@ test("organizer participant correction uses a private RPC and never appears publ
       c.args?.p_correct_player_id==="person1b"));
   }finally{admin.close();}
 });
+
+test("organizer can select 25 players as four teams 6v6 or six teams 4v4",async()=>{
+  const roster=Array.from({length:25},(_,i)=>({
+    id:"available-"+i,name:"Available "+i,
+    email:"available-"+i+"@example.com",
+    skill:5,gender:null,positions:[],attendance:"present"
+  }));
+  const t=await boot({organizer:true,organizerRoster:roster,
+    initialSnapshot:{active:true,session_id:"session",revision:1,format:6,
+      allowed_formats:[4,5,6],rotation_id:null,teams:[],games:[]}});
+  try{
+    const doc=t.dom.window.document;
+    assert.equal(doc.querySelector("#tm-team-count").value,"6");
+    assert.equal(doc.querySelector("#tm-draft-format").value,"4");
+    assert.match(doc.querySelector("#tm-distribution-summary").textContent,/5 teams of 4/);
+    doc.querySelector("#tm-team-count").value="4";
+    doc.querySelector("#tm-team-count").dispatchEvent(
+      new t.dom.window.Event("change",{bubbles:true}));
+    assert.equal(doc.querySelector("#tm-draft-format").value,"6");
+    assert.match(doc.querySelector("#tm-distribution-summary").textContent,/1 team of 7/);
+  }finally{t.close();}
+});
+
+test("anonymous seven-player team can record a normal 6v6 teammate rotation",async()=>{
+  const teams=makeTeams(4);
+  teams[0].players=Array.from({length:7},(_,i)=>({
+    id:"team1-"+i,name:"Team 1 Player "+i
+  }));
+  const playing=teams[0].players.slice(0,6).map(p=>({
+    player_id:p.id,name:p.name,team_id:"team1",is_substitute:false
+  }));
+  const t=await boot({initialSnapshot:{
+    active:true,session_id:"session",format:6,revision:8,
+    rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams,
+    games:[{id:"game1",round:1,court:1,status:"playing",
+      team_a_id:"team1",team_b_id:"team2",winner_team_id:null}]
+  },lineupByGame:{game1:playing}});
+  try{
+    const doc=t.dom.window.document;
+    const key="game1-team1";
+    assert(doc.querySelector('[data-tm-game-action="rotate-teammate"]'));
+    doc.querySelector('[data-rotate-out="'+key+'"]').value="team1-0";
+    doc.querySelector('[data-rotate-in="'+key+'"]').value="team1-6";
+    doc.querySelector('[data-tm-game-action="rotate-teammate"]').click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_public_rotate_teammate"&&
+      c.args?.p_out_player_id==="team1-0"&&
+      c.args?.p_in_player_id==="team1-6"));
+    assert(doc.querySelector("#tm-organizer").hidden);
+  }finally{t.close();}
+});
