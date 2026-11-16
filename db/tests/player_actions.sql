@@ -8,6 +8,7 @@ declare
   v_payload jsonb;
   v_members jsonb;
   v_game uuid;
+  v_next_game uuid;
   v_team1 uuid;
   v_team2 uuid;
   v_team3 uuid;
@@ -114,6 +115,24 @@ begin
     raise exception 'Six-team rotation permitted a permanent transfer';
   exception when sqlstate '22023' then null;
   end;
+
+  -- Team 1 originally won and needs another substitute for its next match.
+  -- Correcting the opening winner makes Team 2 play instead. Its own
+  -- player cannot remain borrowed as Team 1's planned substitute.
+  select id into v_next_game from public.tm_games
+    where rotation_id=v_rotation and court=1 and round_number=2;
+  select session_player_id into v_other from public.tm_memberships
+    where rotation_id=v_rotation and team_id=v_team2 limit 1;
+  perform public.tm_public_record_sub(v_next_game,v_other,v_team1);
+  if jsonb_array_length(public.tm_public_game_subs(v_next_game))<>1 then
+    raise exception 'Expected an accepted next-game substitute';
+  end if;
+  perform public.tm_org_correct_winner(v_game,v_team2);
+  if jsonb_array_length(public.tm_public_game_subs(v_next_game))<>0
+     or (select team_a_id from public.tm_games
+          where id=v_next_game)<>v_team2 then
+    raise exception 'Winner correction left an unsafe planned substitute';
+  end if;
   perform public.tm_org_end_session(v_session);
 
   -- Five-team case: transfer a surplus player from six-player roster.
