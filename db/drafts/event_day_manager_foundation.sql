@@ -34,6 +34,8 @@ create table public.tm_sessions (
   -- when a linked event is deleted later.
   event_id uuid references public.events(id) on delete set null,
   event_title text not null check (length(btrim(event_title)) between 1 and 120),
+  event_visibility text not null check (event_visibility in ('public','private')),
+  -- Session.format is a suggested initial setting; each rotation stores its own playing_format.
   status text not null default 'active'
     check (status in ('active', 'ended')),
   format smallint not null check (format in (4, 5, 6)),
@@ -71,6 +73,7 @@ create table public.tm_rotations (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null references public.tm_sessions(id) on delete cascade,
   sequence integer not null check (sequence > 0),
+  playing_format smallint not null check (playing_format in (4,5,6)),
   status text not null default 'draft'
     check (status in ('draft', 'published', 'completed', 'ended_early', 'closed')),
   created_at timestamptz not null default now(),
@@ -244,9 +247,9 @@ begin
       using errcode='22023';
   end if;
   -- The unique active-session index rejects concurrent starts atomically.
-  insert into public.tm_sessions(event_id, event_title, format, balance_skill,
-    balance_gender, balance_positions, created_by)
-  select e.id, e.title, p_format, coalesce(p_balance_skill,true),
+  insert into public.tm_sessions(event_id, event_title, event_visibility,
+    format, balance_skill, balance_gender, balance_positions, created_by)
+  select e.id, e.title, e.visibility, p_format, coalesce(p_balance_skill,true),
     coalesce(p_balance_gender,false),
     case when p_format = 4 then false else coalesce(p_balance_positions,false) end,
     auth.uid()
@@ -438,6 +441,7 @@ declare
   v_session public.tm_sessions%rowtype;
   v_rotation uuid;
   v_rotation_status text;
+  v_rotation_format smallint;
   v_title text;
   v_teams jsonb;
   v_games jsonb;
@@ -449,7 +453,8 @@ begin
   end if;
 
   v_title := v_session.event_title;
-  select id,status into v_rotation,v_rotation_status from public.tm_rotations
+  select id,status,playing_format into v_rotation,v_rotation_status,v_rotation_format
+    from public.tm_rotations
     where session_id=v_session.id
       and status in ('published','completed','ended_early')
     order by sequence desc limit 1;
@@ -476,7 +481,7 @@ begin
     'active',true,
     'session_id',v_session.id,
     'event_title',v_title,
-    'format',v_session.format,
+    'format',coalesce(v_rotation_format,v_session.format),
     'revision',v_session.revision,
     'rotation_id',v_rotation,
     'rotation_status',v_rotation_status,
