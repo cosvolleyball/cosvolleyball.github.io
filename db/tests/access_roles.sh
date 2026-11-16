@@ -24,6 +24,8 @@ must_deny "set role anon; select public.tm_org_roster('11111111-1111-4111-8111-1
 must_deny "set role anon; select public.tm_org_stats('11111111-1111-4111-8111-111111111111');"
 must_deny "set role anon; select public.tm_org_game_appearances('11111111-1111-4111-8111-111111111111');"
 must_deny "set role anon; select public.tm_org_teammate_pairs('11111111-1111-4111-8111-111111111111');"
+must_deny "set role anon; select public.tm_org_transfers('11111111-1111-4111-8111-111111111111');"
+must_deny "set role anon; select public.tm_org_correct_transfer('11111111-1111-4111-8111-111111111111','11111111-1111-4111-8111-111111111111','11111111-1111-4111-8111-111111111111');"
 must_deny "set role anon; select public.tm_org_save_profile('x@example.com','No',5::smallint,null,'{}'::text[]);"
 must_deny "set role authenticated; select email from public.tm_profiles;"
 must_deny "set role authenticated; select * from public.tm_games;"
