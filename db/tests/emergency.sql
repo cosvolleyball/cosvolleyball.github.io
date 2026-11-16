@@ -19,7 +19,9 @@ begin
     or has_function_privilege('anon',
         'public.tm_org_correct_appearance(uuid,uuid,uuid)','execute')
     or not has_function_privilege('anon',
-        'public.tm_public_game_lineup(uuid)','execute') then
+        'public.tm_public_game_lineup(uuid)','execute')
+    or has_function_privilege('anon',
+        'public.tm_org_game_appearances(uuid)','execute') then
     raise exception 'Emergency RPC permissions are unsafe';
   end if;
   perform set_config('request.jwt.claim.sub',
@@ -82,6 +84,9 @@ begin
   exception when sqlstate '22023' then null;
   end;
   perform public.tm_public_report_winner(v_game,v_team1);
+  if jsonb_array_length(public.tm_org_game_appearances(v_game))<>13 then
+    raise exception 'Organizer correction should see all 13 real participants';
+  end if;
   if (select count(*) from public.tm_game_appearances
     where game_id=v_game and session_player_id=v_out
       and not active_on_court)<>1 then
