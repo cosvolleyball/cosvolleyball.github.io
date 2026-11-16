@@ -128,6 +128,7 @@ declare
   v_session public.tm_sessions%rowtype;
   v_game public.tm_games%rowtype;
   v_rotation_status text;
+  v_format smallint;
   v_team uuid;
   v_sub_count integer;
   v_available_count integer;
@@ -145,8 +146,8 @@ begin
     raise exception 'No active session for this game' using errcode='22023';
   end if;
   select * into v_game from public.tm_games where id=p_game_id;
-  select status into v_rotation_status from public.tm_rotations
-    where id=v_game.rotation_id;
+  select status,playing_format into v_rotation_status,v_format
+    from public.tm_rotations where id=v_game.rotation_id;
   if v_rotation_status<>'published' then
     raise exception 'Rotation is not published' using errcode='22023';
   end if;
@@ -187,7 +188,7 @@ begin
       raise exception 'A planned substitute is unavailable'
         using errcode='22023';
     end if;
-    v_regular_limit := greatest(v_session.format-v_sub_count,0);
+    v_regular_limit := greatest(v_format-v_sub_count,0);
     select count(*) into v_available_count
     from public.tm_memberships m
     join public.tm_session_players sp on sp.id=m.session_player_id
