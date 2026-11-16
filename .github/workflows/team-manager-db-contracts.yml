@@ -49,5 +49,9 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/fixture.sql
       - name: Apply Teams Manager review draft to test database ONLY
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_foundation.sql
+      - name: Apply organizer draft and publication RPCs to test database ONLY
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_rotations.sql
       - name: Verify permissions, roster import, privacy and existing event deletion
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/contracts.sql
+      - name: Verify private drafts, explicit publication and early rotation ending
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/rotations.sql
