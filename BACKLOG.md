@@ -15,10 +15,12 @@ This file is the shared source of truth for planned website work. Keep this list
 - **Acceptance:** creation uses INSERT, never UPDATE; existing event is unchanged, and the new event has no prior players or payments.
 - **Delivery:** implement and test on a feature branch; review before production merge.
 
-### 2. Add to Calendar — Queued
-- Offer calendar integration for players on event pages and/or confirmation.
-- Include correct start/end time, gym and event information; avoid revealing private invitation or registration-management tokens.
-- **Acceptance:** calendar event is accurate for Mountain Time and remains usable on phones.
+### 2. Add to Calendar — Implemented on feature branch; pending review
+- Confirmed registrations show **Google Calendar** and **Apple / Outlook (.ics)** options in their success popup. Waitlisted players do not receive calendar buttons because they do not yet have a reserved spot.
+- Calendar data uses actual UTC start/end instants, with daylight-saving-safe date conversion, and the event's title and gym venue.
+- Calendar content contains no player email, private event invitation token, registration management token, or payment instructions.
+- Both calendar options are keyboard accessible and wrap vertically on narrow screens; no Supabase changes needed.
+- **Acceptance:** automated tests cover UTC/DST, ICS escaping and line folding, missing/invalid times, privacy, waitlist visibility, and download-on-click; manual mobile browser verification remains part of Phase 11 final review.
 
 ### 3. Mobile and accessibility audit — Queued
 - Review public registration, event details, organizer dashboard, dialogs, and check-in on narrow screens.
