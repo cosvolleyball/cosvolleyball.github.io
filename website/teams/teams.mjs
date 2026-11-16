@@ -293,6 +293,13 @@ function renderDraft() {
     <div class="tm-team-grid">
     ${teams.map((team,teamIndex)=>`<article class="tm-team">
       <h4>Team ${team.seed} <small>(${team.playerIds.length} players)</small></h4>
+      ${team.playerIds.length>state.draft.playingFormat
+        ? `<p class="tm-muted">Extra roster player(s) can rotate into games.
+          ${(state.draft.sharedRolePairs||[]).filter(p=>p.seed===team.seed).map(p=>
+            "Suggested shared-role pair: "+
+            p.playerIds.map(id=>escapeHtml(lookup.get(id)?.name||id)).join(" + ")
+          ).join("")}</p>`
+        : ""}
       ${team.playerIds.map(id=>{
         const player = lookup.get(id);
         const swapTargets=teams.flatMap((other,i)=>i===teamIndex?[]:
