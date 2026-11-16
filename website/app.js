@@ -460,6 +460,7 @@ function openSignup(id) {
   $("signup-summary").textContent=`${dateTime(e.starts_at)} · ${e.venue} · ${money(e.price_cents)}${e.spots_remaining<=0?" · This registration will join the waitlist.":""}`;
   $("signup-error").textContent="";
   $("signup-dialog").showModal();
+  $("player-name").focus();
 }
 $("close-dialog").addEventListener("click",()=>$("signup-dialog").close());
 // Client-side email checks: syntax and likely domain typos. No claim is made
@@ -561,6 +562,7 @@ $("signup-form").addEventListener("submit",async ev=>{
   $("registration-success-email").textContent = submittedEmail;
   configureRegistrationCalendar(calendarSourceEvent, data?.status === "registered");
   $("registration-success-dialog").showModal();
+  $("registration-success-title").focus();
   $("signup-form").reset();updateEmailHint();
   if (validInviteToken) await loadInvitedEvent();
   else await loadEvents();
@@ -972,7 +974,7 @@ function phase9RosterRow(r) {
   ].filter(Boolean).join(" · ");
   const cancel = r.registration_status === "cancelled"
     ? '<span class="muted small">Cancelled</span>'
-    : `<button class="button secondary" data-cancel="${esc(r.id)}">Cancel</button>`;
+    : `<button class="button secondary" data-cancel="${esc(r.id)}" aria-label="Cancel registration for ${esc(r.player_name)}">Cancel</button>`;
   const actionableUnpaid = eligible && !noShow && r.payment_status === "unpaid";
   return `<tr class="phase9-player-row ${actionableUnpaid ? "phase9-unpaid-row" : ""}" data-player="${esc(r.id)}">
     <td data-label="Player" class="phase9-player-cell"><strong>${esc(r.player_name)}</strong>
@@ -1292,12 +1294,30 @@ function showDashboardTab(which, refresh = true) {
   $("dashboard-finance-pane").hidden = !finance;
   for (const [id, selected] of [["dashboard-tab-events", !finance], ["dashboard-tab-finance", finance]]) {
     $(id).setAttribute("aria-selected", String(selected));
+    $(id).tabIndex = selected ? 0 : -1;
     $(id).classList.toggle("active", selected);
   }
   if (finance && refresh) void loadFinance();
 }
 $("dashboard-tab-events").addEventListener("click", () => showDashboardTab("events"));
 $("dashboard-tab-finance").addEventListener("click", () => showDashboardTab("finance"));
+// Arrow keys, Home and End follow the WAI-ARIA tab keyboard pattern.
+$("dashboard-tab-events").parentElement.addEventListener("keydown", event => {
+  const tabs = [$("dashboard-tab-events"), $("dashboard-tab-finance")];
+  const index = tabs.indexOf(document.activeElement);
+  if (index === -1) return;
+  let next;
+  switch (event.key) {
+    case "ArrowRight": next = (index + 1) % tabs.length; break;
+    case "ArrowLeft": next = (index + tabs.length - 1) % tabs.length; break;
+    case "Home": next = 0; break;
+    case "End": next = tabs.length - 1; break;
+    default: return;
+  }
+  event.preventDefault();
+  showDashboardTab(next === 0 ? "events" : "finance");
+  tabs[next].focus();
+});
 $("finance-refresh").addEventListener("click", () => void loadFinance());
 
 function financeTypeChanged() {
