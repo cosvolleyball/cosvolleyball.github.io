@@ -19,6 +19,7 @@ declare
   v_team_count integer;
   v_source_court smallint;
   v_source_team uuid;
+  v_format smallint;
   v_player_status text;
   v_regular_count integer;
   v_sub_count integer;
@@ -34,6 +35,8 @@ begin
       using errcode='22023';
   end if;
   select * into v_game from public.tm_games where id=p_game_id;
+  select playing_format into v_format from public.tm_rotations
+    where id=v_game.rotation_id;
   select count(*) into v_team_count from public.tm_teams
     where rotation_id=v_game.rotation_id;
   if v_team_count<>6 then
@@ -81,7 +84,7 @@ begin
     );
   select count(*) into v_sub_count from public.tm_game_subs
     where game_id=p_game_id and target_team_id=p_target_team_id;
-  if v_regular_count+v_sub_count>=v_session.format then
+  if v_regular_count+v_sub_count>=v_format then
     raise exception 'Team already has enough players for this game'
       using errcode='22023';
   end if;
@@ -143,6 +146,7 @@ declare
   v_session public.tm_sessions%rowtype;
   v_from_team_id uuid;
   v_available_count integer;
+  v_format smallint;
   v_team_count integer;
   v_attendance text;
 begin
@@ -155,6 +159,8 @@ begin
     raise exception 'Transfer is outside an active published rotation'
       using errcode='22023';
   end if;
+  select playing_format into v_format from public.tm_rotations
+    where id=p_rotation_id;
   select count(*) into v_team_count from public.tm_teams
     where rotation_id=p_rotation_id;
   if v_team_count<>5 then
@@ -198,7 +204,7 @@ begin
   join public.tm_session_players sp on sp.id=m.session_player_id
   where m.rotation_id=p_rotation_id and m.team_id=v_from_team_id
     and sp.attendance in ('present','waiting');
-  if v_available_count-1<v_session.format then
+  if v_available_count-1<v_format then
     raise exception 'Source team needs enough players for its own matches'
       using errcode='22023';
   end if;
