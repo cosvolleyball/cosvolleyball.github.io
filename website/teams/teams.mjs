@@ -20,6 +20,7 @@ const state = {
   undoStack: [],
   lastPrivateRevision: null,
   lastPrivateSessionId: null,
+  adjustRenderKey: null,
   refreshing: false
 };
 const statuses = ["candidate", "present", "waiting", "break", "departed"];
@@ -332,6 +333,50 @@ function constrainFormat() {
   $("tm-balance-positions").disabled=four;
   if(four)$("tm-balance-positions").checked=false;
 }
+function updateReplacementOptions() {
+  const teams=state.snapshot?.teams||[];
+  const selectedTeam=teams.find(t=>t.id===$("tm-arrival-team").value);
+  const previous=$("tm-replace-player").value;
+  const candidates=(selectedTeam?.players||[]).filter(p=>{
+    const profile=state.roster.find(r=>r.id===p.id);
+    return ["break","departed"].includes(profile?.attendance);
+  });
+  $("tm-replace-player").innerHTML=
+    '<option value="">No replacement — fill an open spot</option>'+
+    candidates.map(p=>`<option value="${escapeHtml(p.id)}">
+      ${escapeHtml(p.name)} (${escapeHtml(
+        readableStatus(state.roster.find(r=>r.id===p.id)?.attendance))})
+    </option>`).join("");
+  if(candidates.some(p=>p.id===previous))$("tm-replace-player").value=previous;
+}
+function renderRosterAdjust() {
+  const panel=$("tm-roster-adjust");
+  const snapshot=state.snapshot;
+  const shown=Boolean(snapshot?.active&&snapshot.rotation_status==="published");
+  panel.hidden=!shown;
+  if(!shown){
+    state.adjustRenderKey=null;
+    return;
+  }
+  const key=snapshot.session_id+":"+snapshot.revision;
+  if(state.adjustRenderKey===key)return;
+  state.adjustRenderKey=key;
+  const teams=snapshot.teams||[];
+  const currentPlayer=$("tm-arrival-player").value;
+  const currentTeam=$("tm-arrival-team").value;
+  const assigned=new Set(teams.flatMap(t=>(t.players||[]).map(p=>p.id)));
+  const unassigned=state.roster.filter(p=>
+    ["present","waiting"].includes(p.attendance)&&!assigned.has(p.id));
+  $("tm-arrival-player").innerHTML='<option value="">Choose player…</option>'+
+    unassigned.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
+  if(unassigned.some(p=>p.id===currentPlayer))$("tm-arrival-player").value=currentPlayer;
+  $("tm-arrival-team").innerHTML='<option value="">Choose team…</option>'+
+    teams.map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.label)}</option>`).join("");
+  if(teams.some(t=>t.id===currentTeam))$("tm-arrival-team").value=currentTeam;
+  updateReplacementOptions();
+  $("tm-assign-arrival").disabled=!unassigned.length;
+}
+
 function renderOrganizer() {
   if(!state.isOrganizer)return;
   const active=Boolean(state.snapshot?.active);
@@ -349,6 +394,7 @@ function renderOrganizer() {
   const allComplete=canEnd && rotation.games.every(g=>g.status==="completed");
   $("tm-end-rotation").textContent=allComplete?"Complete rotation":"End rotation early";
   renderDraft();
+  renderRosterAdjust();
 }
 async function loadPrivate() {
   const session=state.snapshot?.session_id;
@@ -539,6 +585,23 @@ $("tm-walkin-form").addEventListener("submit",e=>{e.preventDefault();void action
   feedback("Walk-in added and checked in.");
   await refresh(true);
 });});
+$("tm-arrival-team").addEventListener("change",updateReplacementOptions);
+$("tm-assign-arrival").addEventListener("click",()=>void action(async()=>{
+  if(!state.snapshot?.active||state.snapshot.rotation_status!=="published")
+    throw new Error("No active published rotation to adjust.");
+  const incoming=$("tm-arrival-player").value;
+  const team=$("tm-arrival-team").value;
+  const outgoing=$("tm-replace-player").value||null;
+  if(!incoming||!team)throw new Error("Choose an unassigned player and a team.");
+  if(!window.confirm("Permanently assign this player to the team until the next reshuffle?"))return;
+  await rpc("tm_org_adjust_roster",{
+    p_rotation_id:state.snapshot.rotation_id,
+    p_in_player_id:incoming,p_team_id:team,
+    p_out_player_id:outgoing
+  });
+  feedback("Team roster adjusted. The updated assignment is now public.");
+  await refresh(true);
+}));
 $("tm-roster").addEventListener("change",e=>{
   const id=e.target.dataset.attendance;
   if(!id)return;
