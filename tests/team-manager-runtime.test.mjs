@@ -12,7 +12,8 @@ const optionsCode=fs.readFileSync(path.join(root,"rotation-options.mjs"),"utf8")
   .replace("export function rotationOptions","function rotationOptions");
 
 async function boot({initialSnapshot,organizer=false,organizerRoster=[],
-  lineupByGame={},organizerAppearances={},transferHistory=[]}={}){
+  lineupByGame={},organizerAppearances={},transferHistory=[],
+  staging=true}={}){
   const dom=new JSDOM(page,{
     url:"https://test.local/teams/",
     runScripts:"outside-only",
@@ -20,6 +21,9 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
   });
   const calls=[];
   dom.window.confirm=()=>true;
+  if(staging)dom.window.TEAMS_MANAGER_STAGING_CONFIG={
+    url:"https://staging.example.supabase.co",publishableKey:"sb_publishable_test_only"
+  };
   let snapshot=initialSnapshot||{active:false};
   let broadcastListener=null;
   let subscribed=false;
@@ -461,5 +465,16 @@ test("organizers can correct a previously recorded five-team transfer",async()=>
     assert(t.calls.some(c=>c.name==="tm_org_correct_transfer"&&
       c.args?.p_session_player_id==="person1"&&
       c.args?.p_to_team_id==="team1"));
+  }finally{t.close();}
+});
+
+test("nonproduction preview without explicit staging config never opens a database connection",async()=>{
+  const t=await boot({staging:false});
+  try {
+    assert(!t.isSubscribed());
+    assert(!t.calls.some(c=>c.name==="tm_public_snapshot"));
+    assert.match(t.dom.window.document.querySelector("#tm-public-content").textContent,
+      /development preview is not connected/i);
+    assert.equal(t.dom.window.document.querySelector("#tm-organizer").hidden,true);
   }finally{t.close();}
 });
