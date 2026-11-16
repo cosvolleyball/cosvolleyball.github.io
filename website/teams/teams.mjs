@@ -4,7 +4,21 @@ import { rotationOptions } from "./rotation-options.mjs";
 
 // Public publishable browser credentials, matching the main site's client.
 // Never embed service_role credentials or privileged data in this module.
-const supabase = createClient("https://mfumtentefcuysibknyl.supabase.co", "sb_publishable_JGD9JifuMwGF37U2SCxRig_PvgA8psg");
+const PRODUCTION_CONFIG = {
+  url: "https://mfumtentefcuysibknyl.supabase.co",
+  publishableKey: "sb_publishable_JGD9JifuMwGF37U2SCxRig_PvgA8psg"
+};
+// A preview served from localhost or any nonproduction domain must NOT
+// silently connect to the real COS Volleyball Supabase project.
+// Explicitly set window.TEAMS_MANAGER_STAGING_CONFIG before this module
+// runs in a temporary preview, using only a STAGING publishable key.
+const productionHost = window.location.hostname === "cosvolleyball.github.io";
+const selectedConfig = productionHost
+  ? PRODUCTION_CONFIG
+  : window.TEAMS_MANAGER_STAGING_CONFIG;
+const supabase = selectedConfig?.url && selectedConfig?.publishableKey
+  ? createClient(selectedConfig.url,selectedConfig.publishableKey)
+  : null;
 const $ = id => document.getElementById(id);
 const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, c => ({
   "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
@@ -41,6 +55,7 @@ function feedback(message, isError = false) {
   el.textContent = message;
 }
 async function rpc(method, args = {}) {
+  if(!supabase)throw new Error("Teams Manager requires an explicit staging configuration in previews.");
   const { data, error } = await supabase.rpc(method, args);
   if (error) throw new Error(error.message || "Request failed");
   return data;
@@ -1101,6 +1116,13 @@ function connectRealtime() {
   }
 }
 (async()=>{
+  if(!supabase) {
+    $("tm-status").textContent="Preview not connected";
+    $("tm-status").className="tm-status is-offline";
+    $("tm-public-content").innerHTML =
+      '<div class="tm-empty">This development preview is not connected to a staging database. The live website is unaffected.</div>';
+    return;
+  }
   try {
     await checkOrganizer();
     await refresh(true);
@@ -1112,9 +1134,9 @@ function connectRealtime() {
 })();
 // Recovery fallback: a lost WebSocket, suspended mobile tab or missed event
 // must never leave the court schedule stale indefinitely.
-setInterval(()=>{if(!document.hidden)void refresh();},8000);
+setInterval(()=>{if(supabase&&!document.hidden)void refresh();},8000);
 document.addEventListener("visibilitychange",()=>{
-  if(!document.hidden)void refresh();
+  if(supabase&&!document.hidden)void refresh();
 });
 window.addEventListener("pagehide",()=>{
   if(realtimeRefreshTimer!==null)clearTimeout(realtimeRefreshTimer);
