@@ -89,6 +89,27 @@
           </form>
         </section>
 
+        <section id="tm-roster-adjust" class="tm-panel" aria-labelledby="tm-roster-adjust-title" hidden>
+          <h3 id="tm-roster-adjust-title">Late arrivals and replacements</h3>
+          <p>Between games, assign a newly arrived player to a vacant team spot
+            or permanently replace someone marked on break or departed.
+            A replaced player waits for the next reshuffle.</p>
+          <div class="tm-form tm-inline">
+            <label>Unassigned available player
+              <select id="tm-arrival-player"><option value="">Choose player…</option></select>
+            </label>
+            <label>Team to join
+              <select id="tm-arrival-team"><option value="">Choose team…</option></select>
+            </label>
+            <label>Unavailable player to replace (if needed)
+              <select id="tm-replace-player"><option value="">No replacement — fill an open spot</option></select>
+            </label>
+            <button type="button" id="tm-assign-arrival" class="tm-button tm-secondary">
+              Assign to team
+            </button>
+          </div>
+        </section>
+
         <section class="tm-panel" aria-labelledby="tm-draft-title">
           <h3 id="tm-draft-title">Generate balanced teams</h3>
           <p>Preview as many combinations as needed, make local swaps and publish only when ready.</p>
