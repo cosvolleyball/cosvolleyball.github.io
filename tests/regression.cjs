@@ -80,7 +80,7 @@ const results = [];
         /^import[\s\S]*?;\n/,
         "const createClient=()=>window.fakeSupabase;\n",
       ) +
-        "\nwindow.testing={emailProblem,esc,calculatedEventTimes,selectedDurationMinutes,eventCard,eventDetailPage,fetchAllFinanceTransactions,renderFinances,loadAdminEvents,refreshAdmin,loadFinance,loadEvents,loadInvitedEvent,loadPhase8EventAudit,editEvent,openDuplicateEventEditor,setOrganizer:v=>isOrganizer=v,setFinance:(h,t)=>{financeHosts=h;financeTransactions=t}};",
+        "\nwindow.testing={emailProblem,esc,calculatedEventTimes,selectedDurationMinutes,eventCard,eventDetailPage,fetchAllFinanceTransactions,renderFinances,loadAdminEvents,refreshAdmin,loadFinance,loadEvents,loadInvitedEvent,loadPhase8EventAudit,editEvent,openDuplicateEventEditor,calendarUtc,calendarEventDetails,googleCalendarLink,createIcsCalendar,configureRegistrationCalendar,setOrganizer:v=>isOrganizer=v,setFinance:(h,t)=>{financeHosts=h;financeTransactions=t}};",
     );
     await new Promise((r) => setTimeout(r, 20));
   }
@@ -576,6 +576,121 @@ const results = [];
         testing.setOrganizer(false);
         testing.openDuplicateEventEditor(window.sourceEvent);
         return normal && !document.getElementById("event-editor-dialog").hasAttribute("open");
+      }),
+      true
+    ));
+
+
+  // Phase 11: calendar integrations must use actual UTC instants and never
+  // leak registration emails or bearer invitation / management tokens.
+  await test("Google Calendar encodes exact event start/end, title and venue", async () =>
+    assert.equal(
+      await page.evaluate(() => {
+        const source = {
+          id: "a039ac22-fad3-4f83-b435-7d1cba2b9ec0",
+          title: "Open Gym & Volleyball", venue: "Hillside Community Center",
+          starts_at: "2027-03-14T08:30:00.000Z", ends_at: "2027-03-14T10:30:00.000Z",
+          invite_token: "private-token-must-not-leak", player_email: "private@example.com"
+        };
+        const url = new URL(testing.googleCalendarLink(source));
+        return url.hostname === "calendar.google.com" &&
+          url.searchParams.get("action") === "TEMPLATE" &&
+          url.searchParams.get("text") === source.title &&
+          url.searchParams.get("location") === source.venue &&
+          url.searchParams.get("dates") === "20270314T083000Z/20270314T103000Z" &&
+          !url.toString().includes(source.invite_token) &&
+          !url.toString().includes(source.player_email);
+      }),
+      true
+    ));
+  await test("ICS event preserves DST instant, escapes names and excludes private data", async () =>
+    assert.equal(
+      await page.evaluate(() => {
+        window.TextEncoder = TextEncoder || window.TextEncoder;
+        const event = {
+          id: "a039ac22-fad3-4f83-b435-7d1cba2b9ec0",
+          title: "Volley, \"Night\"; Friday\nSecond line",
+          venue: "Gym\\Court; Colorado, Springs",
+          starts_at: "2027-11-07T07:30:00.000Z",
+          ends_at: "2027-11-07T10:30:00.000Z",
+          invite_token: "secret-invite-abc", manage_token: "secret-manage-xyz",
+          player_email: "private@example.com", payment_instructions: "secret-payment-handle"
+        };
+        const ics = testing.createIcsCalendar(event);
+        return ics.startsWith("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n") &&
+          ics.endsWith("END:VCALENDAR\r\n") &&
+          ics.includes("DTSTART:20271107T073000Z\r\n") &&
+          ics.includes("DTEND:20271107T103000Z\r\n") &&
+          ics.includes("SUMMARY:Volley\\, \"Night\"\\; Friday\\nSecond line") &&
+          ics.includes("LOCATION:Gym\\\\Court\\; Colorado\\, Springs") &&
+          ![event.invite_token,event.manage_token,event.player_email,event.payment_instructions].some(s=>ics.includes(s)) &&
+          ics.split("\r\n").every(line=>new TextEncoder().encode(line).length<=75);
+      }),
+      true
+    ));
+  await test("Invalid or reversed event times do not create calendar links", async () =>
+    assert.equal(
+      await page.evaluate(() =>
+        [
+          {starts_at: "not-a-time", ends_at: "2027-01-01T12:00Z"},
+          {starts_at: "2027-01-01T12:00Z", ends_at: "2027-01-01T11:00Z"},
+          {starts_at: "2027-01-01T12:00Z", ends_at: "2027-01-01T12:00Z"}
+        ].every(e=>testing.googleCalendarLink(e)===null && testing.createIcsCalendar(e)===null)
+      ),true
+    ));
+  await test("Calendar choices hidden for waitlist and shown only for confirmed signup", async () => {
+    await boot();
+    assert.equal(
+      await page.evaluate(async () => {
+        const e = {
+          id: "verified-event", title: "Monday Gym", venue: "Hillside Community Center",
+          starts_at: "2027-04-13T00:00:00Z", ends_at: "2027-04-13T03:00:00Z",
+          status: "published", visibility: "public", capacity: 24, spots_remaining: 10, price_cents: 500
+        };
+        window.reply.public_open_gym_events = {data:[e],error:null};
+        window.reply.register_for_open_gym = {data:{status:"registered"},error:null};
+        await testing.loadEvents();
+        for(const [id,value] of Object.entries({
+          "event-id":e.id,"player-name":"Test Player","player-email":"test@example.com"
+        })) document.getElementById(id).value=value;
+        document.getElementById("signup-dialog").close = function(){};
+        document.getElementById("registration-success-dialog").showModal = function(){};
+        const submit = () => document.getElementById("signup-form").dispatchEvent(
+          new Event("submit",{bubbles:true,cancelable:true})
+        );
+        submit();
+        await new Promise(r=>setTimeout(r,10));
+        const panel = document.getElementById("registration-calendar");
+        const google = document.getElementById("calendar-google");
+        const download = document.getElementById("calendar-download");
+        const okRegistered = !panel.hidden && google.href.includes("calendar.google.com") && !download.disabled;
+        window.reply.register_for_open_gym = {data:{status:"waitlisted"},error:null};
+        document.getElementById("event-id").value=e.id;
+        document.getElementById("player-name").value="Test Player";
+        document.getElementById("player-email").value="test@example.com";
+        submit();
+        await new Promise(r=>setTimeout(r,10));
+        return okRegistered && panel.hidden && !google.hasAttribute("href") && download.disabled;
+      }),
+      true
+    );
+  });
+  await test("Download button produces a calendar file only on a user click", async () =>
+    assert.equal(
+      await page.evaluate(() => {
+        const e = {id:"calendar-event",title:"Gym",venue:"Court",
+          starts_at:"2027-04-13T00:00:00Z",ends_at:"2027-04-13T03:00:00Z"};
+        let created=0, filename="";
+        URL.createObjectURL = blob => {
+          if(blob.type === "text/calendar;charset=utf-8") created++;
+          return "blob:https://test.local/calendar-test";
+        };
+        URL.revokeObjectURL = () => {};
+        HTMLAnchorElement.prototype.click = function(){ filename=this.download; };
+        testing.configureRegistrationCalendar(e,true);
+        if(created!==0) return false;
+        document.getElementById("calendar-download").click();
+        return created===1 && filename==="cos-volleyball-event.ics";
       }),
       true
     ));
