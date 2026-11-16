@@ -8,7 +8,7 @@ This file is the shared source of truth for planned website work. Keep this list
 
 ## Approved improvements (2026-11-16)
 
-### 1. Duplicate an existing event — In progress
+### 1. Duplicate an existing event — Implemented; awaiting merge and live smoke test
 - Add an organizer-only "Duplicate event" action to existing events.
 - Copy title, venue, start time, duration, capacity, fee, host, payment instructions, visibility, and description.
 - Require selection of a new date, create a separate draft, and do not copy the event ID, private invitation link, registrations, attendance, or payment records.
@@ -22,14 +22,15 @@ This file is the shared source of truth for planned website work. Keep this list
 - Both calendar options are keyboard accessible and wrap vertically on narrow screens; no Supabase changes needed.
 - **Acceptance:** automated tests cover UTC/DST, ICS escaping and line folding, missing/invalid times, privacy, waitlist visibility, and download-on-click; manual mobile browser verification remains part of Phase 11 final review.
 
-### 3. Mobile and accessibility audit — Queued
-- Review public registration, event details, organizer dashboard, dialogs, and check-in on narrow screens.
-- Focus on touch targets, labels, keyboard and screen-reader navigation, contrast, and focus behavior.
-- **Acceptance:** documented findings and tested fixes, without unrelated redesign.
+### 3. Mobile and accessibility audit — Implemented; real-device QA pending
+- Added public/organizer skip links, accessible dialog labels and focus placement, full organizer keyboard tabs, player/transaction-specific action labels, mobile roster table headings, readable small labels, and 44px touch controls.
+- Added responsive form-control typography and retained existing small-screen layouts.
+- **Automated tests:** accessibility behavior and semantic markup added to the isolated regression suite. The changes are not a claim that real iOS/Android browsers or screen readers were manually tested.
+- **Acceptance:** follow [Phase 11 mobile/accessibility review](docs/PHASE11_MOBILE_ACCESSIBILITY_REVIEW.md) for real-device sign-off after a safe preview or merge.
 
-### 4. Expand regression testing — In progress / ongoing
-- Add coverage for event duplication and subsequent calendar changes.
-- Run automated isolated regression tests on pull requests **before** merging as well as on deployments.
+### 4. Expand regression testing — Implemented; final release check pending
+- Added event duplication, calendar UTC/DST and privacy, accessible dialog/focus, tab keyboard navigation, and labeled controls tests.
+- GitHub Actions now runs isolated frontend regression tests on pull requests **before** merging as well as on deployments; the latest accessibility-specific run passed 45 tests with no failures.
 - **Acceptance:** existing tests continue passing, and new functionality has meaningful positive and negative tests.
 
 ## Deferred / low priority
