@@ -46,6 +46,8 @@ const dashboardRequested = query.get("dashboard") === "1" && !detailRequested;
 let isOrganizer = false;
 let eventLoadEpoch = 0;
 let adminRefreshEpoch = 0;
+let adminEventsEpoch = 0;
+let adminAuditEpoch = 0;
 if (dashboardRequested) {
   document.body.classList.add("organizer-view");
   document.title = "Organizer Dashboard | Colorado Springs Pickup Volleyball";
@@ -333,7 +335,7 @@ function wireRegistrationButtons(parent) {
 async function loadInvitedEvent() {
   invitedEvent=null;
   const section=$("invitation-section");
-  if (!inviteToken) {
+  if (inviteToken === null) {
     section.hidden=true;
     invitedEvent=null;
     return;
@@ -679,6 +681,9 @@ async function refreshAdmin(){
   $("admin-login").hidden=isOrganizer;
   $("admin-panel").hidden=!isOrganizer;
   if (!isOrganizer){
+    ++adminEventsEpoch; // Discard event/roster responses started before logout.
+    ++adminAuditEpoch;
+    $("phase8-event-audit-view")?.replaceChildren();
     ++financeEpoch; // Ignore in-flight finance responses after logout.
     ++phase10AccessEpoch; // Clear sensitive access results after logout.
     $("phase10-access-panel").open = false;
@@ -927,12 +932,16 @@ let adminPastEventsExpanded = false;
 const phase91UnpaidEventIds = new Set();
 
 async function loadAdminEvents(){
+  if (!supabase || !isOrganizer) return;
+  const epoch = ++adminEventsEpoch;
+  const stillCurrent = () => isOrganizer && epoch === adminEventsEpoch;
   void loadPhase8EventAudit();
   // Phase 9.1: upcoming/past event sections, for all event statuses and filters.
   // An event becomes past after its scheduled end (not at its start).
   const { data:events, error } = await  supabase.from("events").select("*").order("starts_at",{
     ascending:true
   });
+  if (!stillCurrent()) return;
   if (error) {
     $("admin-events").textContent=error.message;
     return;
@@ -972,6 +981,7 @@ async function loadAdminEvents(){
   }
   const parts=await Promise.all(ordered.map(async e=>{
     const { data:regs, error:rerr } = await  supabase.from("registrations").select("id,player_name,player_email,payment_method,actual_payment_method,payment_status,registration_status,attendance_status,payment_updated_by_email,attendance_updated_by_email,created_at").eq("event_id",e.id).order("created_at");
+    if (!stillCurrent()) return "";
     if(rerr)return `<article class="admin-event"><h4>${esc(e.title)}</h4><p>${esc(rerr.message)}</p></article>`;
     const checkinPanel = phase9RosterPanel(e, regs || []);
     const registeredCount = (regs || []).filter(r => r.registration_status === "registered").length;
@@ -1001,6 +1011,7 @@ async function loadAdminEvents(){
       </div>
     </details>`;
   }));
+  if (!stillCurrent()) return;
   const upcomingCards = parts.slice(0, upcoming.length).join("");
   const pastCards = parts.slice(upcoming.length).join("");
   $("admin-events").innerHTML = `
@@ -1410,6 +1421,7 @@ $("finance-entry-form").addEventListener("submit", async event => {
 // the database so they remain readable after an organizer account is removed.
 async function loadPhase8EventAudit() {
   if (!supabase || !isOrganizer) return;
+  const epoch = ++adminAuditEpoch;
   const hostPane = $("dashboard-events-pane");
   if (!hostPane) return;
   let panel = $("phase8-event-audit-view");
@@ -1424,7 +1436,7 @@ async function loadPhase8EventAudit() {
   const { data, error } = await supabase.from("event_audit_log")
     .select("id,event_title,action,actor_user_id,actor_email,recorded_at,changes")
     .order("id", { ascending: false }).limit(50);
-  if (!isOrganizer) return;
+  if (!isOrganizer || epoch !== adminAuditEpoch) return;
   if (error) {
     panel.innerHTML = `<h3>Recent event activity</h3><p class="error">${esc(error.message)}</p>`;
     return;

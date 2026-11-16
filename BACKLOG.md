@@ -1,6 +1,6 @@
 # COS Volleyball Website — Backlog
 
-**Last reviewed:** 2026-11-14  
+**Last reviewed:** 2026-11-16
 **Project:** [Colorado Springs Pickup Volleyball](https://cosvolleyball.github.io/)  
 **Status:** No urgent development work currently scheduled.
 
@@ -28,6 +28,12 @@ This file is the shared source of truth for planned website work. Keep this list
 - **Status:** No particular new change currently approved or scheduled.
 
 ## Recently completed
+
+### Regression fixes (2026-11-16)
+- Delayed organizer event, roster, and audit responses are discarded after logout or a newer refresh; logout clears audit history.
+- Empty invitation links display an invalid-link message.
+- Registration validates email syntax server-side as well as in the form. This does not add email-domain verification.
+- Added isolated frontend regression tests to the deployment workflow.
 
 ### Phase 10 — Player restrictions and bans (2026-11-14)
 - Organizer can add and clear 15-day email restrictions and permanent registration bans.
