@@ -75,3 +75,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_emergency.sql
       - name: Test in-game injury exception and organizer substitution correction
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/emergency.sql
+      - name: Apply ordinary within-team in-game rotation RPC locally
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_intra_team_rotation.sql
+      - name: Test 25-player 6v6 with seven-person roster and role sharing
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/intra_team_rotation.sql
