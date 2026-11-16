@@ -8,6 +8,8 @@ const root=path.resolve(import.meta.dirname,"../website/teams");
 const page=fs.readFileSync(path.join(root,"index.html"),"utf8");
 const app=fs.readFileSync(path.join(root,"teams.mjs"),"utf8")
   .replace(/^import [^\n]*;\n/gm,"");
+const optionsCode=fs.readFileSync(path.join(root,"rotation-options.mjs"),"utf8")
+  .replace("export function rotationOptions","function rotationOptions");
 
 async function boot({initialSnapshot,organizer=false,organizerRoster=[],
   lineupByGame={},organizerAppearances={}}={}){
@@ -51,7 +53,9 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
   dom.window.addEventListener("error",e=>errs.push(e.message));
   dom.window.eval("const createClient=()=>window.__fakeClient;\n"+
     "const generateBalancedTeams=()=>({teams:[],qualityScore:0});\n"+
-    app+"\nwindow.__tm={refresh};");
+    "const scoreBalancedDraft=()=>0;\n"+
+    "const suggestSharedRolePairs=()=>[];\n"+
+    optionsCode+"\n"+app+"\nwindow.__tm={refresh};");
   await new Promise(resolve=>setTimeout(resolve,40));
   return {
     dom,calls,errs,
