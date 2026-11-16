@@ -30,7 +30,10 @@ create table public.tm_profiles (
 
 create table public.tm_sessions (
   id uuid primary key default gen_random_uuid(),
-  event_id uuid not null references public.events(id) on delete restrict,
+  -- Preserve the existing event deletion workflow. The snapshot survives even
+  -- when a linked event is deleted later.
+  event_id uuid references public.events(id) on delete set null,
+  event_title text not null check (length(btrim(event_title)) between 1 and 120),
   status text not null default 'active'
     check (status in ('active', 'ended')),
   format smallint not null check (format in (4, 5, 6)),
@@ -39,7 +42,7 @@ create table public.tm_sessions (
   balance_gender boolean not null default false,
   balance_positions boolean not null default false,
   revision bigint not null default 1 check (revision > 0),
-  created_by uuid not null references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   started_at timestamptz not null default now(),
   ended_at timestamptz,
   constraint tm_sessions_end_consistency
@@ -95,13 +98,17 @@ create table public.tm_teams (
 -- and writes an audit record below. New rotation = entirely new memberships.
 create table public.tm_memberships (
   rotation_id uuid not null,
+  session_id uuid not null,
   team_id uuid not null,
-  session_player_id uuid not null references public.tm_session_players(id)
-    on delete restrict,
+  session_player_id uuid not null,
   joined_at timestamptz not null default now(),
   primary key (rotation_id, session_player_id),
   foreign key (team_id, rotation_id)
-    references public.tm_teams(id, rotation_id) on delete cascade
+    references public.tm_teams(id, rotation_id) on delete cascade,
+  foreign key (rotation_id, session_id)
+    references public.tm_rotations(id, session_id) on delete cascade,
+  foreign key (session_player_id, session_id)
+    references public.tm_session_players(id, session_id) on delete restrict
 );
 create index tm_memberships_by_team on public.tm_memberships(team_id);
 
@@ -118,6 +125,13 @@ create table public.tm_games (
   started_at timestamptz,
   completed_at timestamptz,
   unique (rotation_id, round_number, court),
+  unique (id, rotation_id),
+  foreign key (team_a_id, rotation_id)
+    references public.tm_teams(id, rotation_id) on delete restrict,
+  foreign key (team_b_id, rotation_id)
+    references public.tm_teams(id, rotation_id) on delete restrict,
+  foreign key (winner_team_id, rotation_id)
+    references public.tm_teams(id, rotation_id) on delete restrict,
   constraint tm_game_distinct_teams
     check (team_a_id is null or team_b_id is null or team_a_id <> team_b_id),
   constraint tm_game_valid_winner
@@ -132,22 +146,40 @@ create table public.tm_games (
 -- An appearance is recorded for a real completed game, not inferred
 -- from membership. Mark one-game substitute appearances separately.
 create table public.tm_game_appearances (
-  game_id uuid not null references public.tm_games(id) on delete cascade,
-  session_player_id uuid not null references public.tm_session_players(id)
-    on delete restrict,
-  team_id uuid not null references public.tm_teams(id) on delete restrict,
+  game_id uuid not null,
+  rotation_id uuid not null,
+  session_id uuid not null,
+  session_player_id uuid not null,
+  team_id uuid not null,
   is_substitute boolean not null default false,
-  primary key (game_id, session_player_id)
+  primary key (game_id, session_player_id),
+  foreign key (game_id, rotation_id)
+    references public.tm_games(id, rotation_id) on delete cascade,
+  foreign key (team_id, rotation_id)
+    references public.tm_teams(id, rotation_id) on delete restrict,
+  foreign key (rotation_id, session_id)
+    references public.tm_rotations(id, session_id) on delete cascade,
+  foreign key (session_player_id, session_id)
+    references public.tm_session_players(id, session_id) on delete restrict
 );
 
 create table public.tm_transfers (
   id bigint generated always as identity primary key,
-  rotation_id uuid not null references public.tm_rotations(id) on delete cascade,
-  session_player_id uuid not null references public.tm_session_players(id),
-  from_team_id uuid not null references public.tm_teams(id),
-  to_team_id uuid not null references public.tm_teams(id),
+  rotation_id uuid not null,
+  session_id uuid not null,
+  session_player_id uuid not null,
+  from_team_id uuid not null,
+  to_team_id uuid not null,
   recorded_at timestamptz not null default now(),
-  recorded_by uuid references auth.users(id),
+  recorded_by uuid references auth.users(id) on delete set null,
+  foreign key (rotation_id,session_id)
+    references public.tm_rotations(id,session_id) on delete cascade,
+  foreign key (session_player_id,session_id)
+    references public.tm_session_players(id,session_id) on delete restrict,
+  foreign key (from_team_id,rotation_id)
+    references public.tm_teams(id,rotation_id) on delete restrict,
+  foreign key (to_team_id,rotation_id)
+    references public.tm_teams(id,rotation_id) on delete restrict,
   constraint tm_transfer_different_teams check (from_team_id <> to_team_id)
 );
 
@@ -205,12 +237,14 @@ begin
     raise exception 'Format must be 4v4, 5v5 or 6v6' using errcode = '22023';
   end if;
   -- The unique active-session index rejects concurrent starts atomically.
-  insert into public.tm_sessions(event_id, format, balance_skill,
+  insert into public.tm_sessions(event_id, event_title, format, balance_skill,
     balance_gender, balance_positions, created_by)
-  values (p_event_id, p_format, coalesce(p_balance_skill,true),
+  select e.id, e.title, p_format, coalesce(p_balance_skill,true),
     coalesce(p_balance_gender,false),
     case when p_format = 4 then false else coalesce(p_balance_positions,false) end,
-    auth.uid()) returning id into v_session;
+    auth.uid()
+  from public.events e where e.id = p_event_id
+  returning id into v_session;
 
   -- A returning player's curated profile (skill, gender, positions)
   -- must never be overwritten by a registration import.
@@ -406,7 +440,7 @@ begin
     return jsonb_build_object('active',false);
   end if;
 
-  select title into v_title from public.events where id=v_session.event_id;
+  v_title := v_session.event_title;
   select id into v_rotation from public.tm_rotations
     where session_id=v_session.id
       and status in ('published','completed','ended_early')
