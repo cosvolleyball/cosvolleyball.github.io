@@ -19,6 +19,10 @@ declare
   v_index integer;
   v_size integer;
 begin
+  if has_function_privilege('anon',
+    'public.tm_org_correct_transfer(uuid,uuid,uuid)','execute') then
+    raise exception 'Anonymous transfer correction is allowed';
+  end if;
   if not has_function_privilege('anon','public.tm_public_record_sub(uuid,uuid,uuid)','execute')
      or not has_function_privilege('anon','public.tm_public_cancel_sub(uuid,uuid)','execute')
      or not has_function_privilege('anon','public.tm_public_transfer(uuid,uuid,uuid)','execute')
@@ -180,6 +184,19 @@ begin
     raise exception 'Transfer allowed source roster below format';
   exception when sqlstate '22023' then null;
   end;
+  -- A player stays assigned until the next reshuffle; public repeat
+  -- transfers must not silently undo a previously agreed move.
+  begin
+    perform public.tm_public_transfer(v_rotation,v_sub,v_team1);
+    raise exception 'Repeated public transfer changed the original agreement';
+  exception when sqlstate '22023' then null;
+  end;
+  perform public.tm_org_correct_transfer(v_rotation,v_sub,v_team1);
+  if (select team_id from public.tm_memberships
+    where rotation_id=v_rotation and session_player_id=v_sub)<>v_team1 then
+    raise exception 'Organizer transfer correction failed';
+  end if;
+  perform public.tm_org_correct_transfer(v_rotation,v_sub,v_team2);
   begin
     perform public.tm_public_record_sub(v_game,v_other,v_team2);
     raise exception 'Five-team temporary substitute was accepted';
