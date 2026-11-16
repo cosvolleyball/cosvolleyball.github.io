@@ -1024,7 +1024,7 @@ function phase9RosterPanel(event, registrations) {
     <div class="phase9-roster-toolbar"><h5>Player check-in</h5>
       <button type="button" class="button secondary phase9-unpaid-toggle" data-unpaid-toggle="${esc(event.id)}" aria-pressed="${unpaidFiltered}">${unpaidFiltered ? "Show all players" : "Show unpaid only"}</button>
     </div>
-    ${registrations.length ? `<div class="phase9-table-scroll"><table class="phase9-roster"><thead><tr><th>Player</th><th>Registration</th><th>Payment</th><th>Method received</th><th>Attendance</th><th>Action</th></tr></thead><tbody>${displayRegistrations.map(phase9RosterRow).join("")}</tbody></table></div>` : '<p class="muted small">No registrations yet.</p>'}
+    ${registrations.length ? `<div class="phase9-table-scroll"><table class="phase9-roster" aria-label="Check-in and payment roster for ${esc(event.title)}"><thead><tr><th scope="col">Player</th><th scope="col">Registration</th><th scope="col">Payment</th><th scope="col">Method received</th><th scope="col">Attendance</th><th scope="col">Action</th></tr></thead><tbody>${displayRegistrations.map(phase9RosterRow).join("")}</tbody></table></div>` : '<p class="muted small">No registrations yet.</p>'}
   </section>`;
 }
 
@@ -1458,7 +1458,7 @@ function renderFinances() {
       <td class="finance-number ${voided ? "finance-voided" : ""}">${money(Number(row.amount_cents))}</td>
       <td>${row.event_label ? `${esc(row.event_label)} · ` : ""}${esc(row.note || "")}${voided ? `<div>Reason: ${esc(row.void_reason || "")}</div>` : ""}</td>
       <td><div class="small">Recorded by: ${esc(row.created_by_email || row.created_by || "Unknown (older record)")}</div>${voided ? `<div class="small">Voided by: ${esc(row.voided_by_email || row.voided_by || "Unknown")}</div>` : ""}</td>
-      <td>${voided ? "—" : `<button class="finance-void-button" type="button" data-finance-void="${esc(row.id)}">Void</button>`}</td>
+      <td>${voided ? "—" : `<button class="finance-void-button" type="button" data-finance-void="${esc(row.id)}" aria-label="Void ${esc(kinds[row.kind] || row.kind)} of ${money(Number(row.amount_cents))} on ${esc(row.occurred_on)}">Void</button>`}</td>
     </tr>`;
   }).join("");
   $("finance-history").innerHTML = financeTransactions.length ? `<table class="finance-table">
