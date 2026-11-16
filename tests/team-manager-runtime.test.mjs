@@ -15,12 +15,32 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
   lineupByGame={},organizerAppearances={}}={}){
   const dom=new JSDOM(page,{
     url:"https://test.local/teams/",
-    runScripts:"outside-only"
+    runScripts:"outside-only",
+    pretendToBeVisual:true
   });
   const calls=[];
   dom.window.confirm=()=>true;
   let snapshot=initialSnapshot||{active:false};
+  let broadcastListener=null;
+  let subscribed=false;
+  const channel={
+    on(type,selector,callback){
+      if(type==="broadcast"&&selector?.event==="changed")
+        broadcastListener=callback;
+      return this;
+    },
+    subscribe(callback){
+      subscribed=true;
+      callback?.("SUBSCRIBED");
+      return this;
+    }
+  };
   dom.window.__fakeClient={
+    channel(name,options){
+      calls.push({name:"__subscribe",topic:name,options});
+      return channel;
+    },
+    removeChannel:async()=>{},
     auth:{
       getUser:async()=>({data:{user:organizer?{id:"organizer-id"}:null}})
     },
@@ -61,6 +81,8 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
     dom,calls,errs,
     setSnapshot(value){snapshot=value;},
     refresh:()=>dom.window.__tm.refresh(),
+    emitBroadcast:()=>broadcastListener?.({payload:{revision:42,active:true}}),
+    isSubscribed:()=>subscribed,
     close:()=>dom.window.close()
   };
 }
@@ -372,5 +394,37 @@ test("anonymous seven-player team can record a normal 6v6 teammate rotation",asy
       c.args?.p_out_player_id==="team1-0"&&
       c.args?.p_in_player_id==="team1-6"));
     assert(doc.querySelector("#tm-organizer").hidden);
+  }finally{t.close();}
+});
+
+test("public Broadcast signal triggers sanitized refetch and does not trust event content",async()=>{
+  const initial={active:true,session_id:"session",revision:1,
+    rotation_id:null,teams:[],games:[],event_title:"Initial"};
+  const t=await boot({initialSnapshot:initial});
+  try {
+    assert(t.isSubscribed(),"Public channel should subscribe automatically");
+    const sub=t.calls.find(c=>c.name==="__subscribe");
+    assert.equal(sub.topic,"teams-manager:public");
+    assert.equal(sub.options.config.private,false);
+    const next={...initial,revision:2,event_title:"Fresh from server"};
+    t.setSnapshot(next);
+    t.emitBroadcast();
+    await new Promise(r=>setTimeout(r,310));
+    assert.match(t.dom.window.document.querySelector("#tm-public-content").textContent,
+      /Fresh from server/);
+    assert(!t.calls.some(c=>c.name==="tm_org_roster"),
+      "Receiving live notifications must never read organizer records");
+  }finally{t.close();}
+});
+
+test("bursts of public Broadcast signals are coalesced, avoiding an RPC storm",async()=>{
+  const t=await boot();
+  try{
+    const before=t.calls.filter(c=>c.name==="tm_public_snapshot").length;
+    for(let i=0;i<20;i++)t.emitBroadcast();
+    await new Promise(r=>setTimeout(r,340));
+    const added=t.calls.filter(c=>c.name==="tm_public_snapshot").length-before;
+    assert(added<=2,`Unexpected snapshot query storm: ${added}`);
+    assert(added>=1,"At least one invalidation should be fetched");
   }finally{t.close();}
 });
