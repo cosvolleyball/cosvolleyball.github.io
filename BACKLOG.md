@@ -2,7 +2,7 @@
 
 **Last reviewed:** 2026-11-16  
 **Site:** https://cosvolleyball.github.io/  
-**Status:** Maintenance mode, pending final Phase 11 real-device smoke tests.
+**Status:** Maintenance mode. Phase 11 is deployed; automated tests and a basic phone smoke check have passed.
 
 This is the source of truth for approved and deferred website work. Keep private credentials, player data and bearer links out of this public file.
 
@@ -10,8 +10,9 @@ This is the source of truth for approved and deferred website work. Keep private
 
 - **Phase 11:** Duplicate Event, Add to Calendar, and mobile/accessibility fixes were merged into `main` on November 16, 2026.
 - Automated tests: **45 passed, 0 failed**. The fresh GitHub Pages deployment workflow succeeded after the first run encountered an artifact-publishing error.
-- **Still to confirm on real devices:** create a duplicate Draft without modifying its source, import a calendar event with the correct local time, and verify registration/check-in on mobile and keyboard. Use the [release test checklist](TEST_CHECKLIST.md). Do not manipulate real player or payment data to conduct smoke tests.
-- When these checks are accepted, mark Phase 11 fully verified and return to normal maintenance without additional feature work.
+- **Phone smoke check confirmed by site owner (2026-11-16):** site looks usable on their phone; **Duplicate Event** appears in the organizer dashboard, and **Add to Calendar** appears after registration.
+- **Not separately verified:** actual calendar import/local-time accuracy, saving a new duplicate Draft without changing the original, and a full VoiceOver/TalkBack or keyboard check. These remain in the [test checklist](TEST_CHECKLIST.md) as targeted checks if needed; do not use real player or payment records to test.
+- No further feature development is scheduled. Revisit only when organizer/player feedback, a reproducible issue, or necessary infrastructure maintenance warrants it.
 
 ## Deferred / low priority
 
