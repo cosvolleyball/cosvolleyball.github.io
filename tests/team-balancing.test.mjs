@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {generateBalancedTeams, scoreBalancedDraft, seededRandom} from "../website/teams/balancing.mjs";
+import {generateBalancedTeams, scoreBalancedDraft, seededRandom, suggestSharedRolePairs} from "../website/teams/balancing.mjs";
 
 function players(count, make = () => ({})) {
   return Array.from({length: count}, (_, i) => ({
@@ -162,4 +162,20 @@ test("manual preview evaluation rejects duplicates, missing players and undersiz
   const fresh=build(roster,{teamCount:4,format:6});
   fresh.teams[0].playerIds.pop();
   assert.throws(()=>scoreBalancedDraft(roster,fresh.teams,options),/playable|every available/);
+});
+
+test("6v6 extra-player rosters can recommend a middle/libero role-sharing pair",()=>{
+  const roster=players(25,i=>({
+    positions:i===0?["middle blocker"]:i===1?["libero"]:["outside"]
+  }));
+  const split=[
+    {seed:1,playerIds:roster.slice(0,7).map(p=>p.id)},
+    {seed:2,playerIds:roster.slice(7,13).map(p=>p.id)},
+    {seed:3,playerIds:roster.slice(13,19).map(p=>p.id)},
+    {seed:4,playerIds:roster.slice(19).map(p=>p.id)}
+  ];
+  const pairs=suggestSharedRolePairs(roster,split,6);
+  assert.deepEqual(pairs,[{seed:1,playerIds:[roster[0].id,roster[1].id]}]);
+  assert.deepEqual(suggestSharedRolePairs(roster,split,4),pairs);
+  assert.deepEqual(suggestSharedRolePairs(roster,split.slice(1),6),[]);
 });
