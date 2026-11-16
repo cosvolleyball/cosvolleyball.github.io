@@ -59,3 +59,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_game_actions.sql
       - name: Test public starts, winners, cross-court dependencies and corrections
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/games.sql
+      - name: Apply public substitute/transfer RPCs in disposable DB ONLY
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_player_actions.sql
+      - name: Verify one-game subs, rotation-long transfers and appearances
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/player_actions.sql
