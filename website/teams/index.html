@@ -136,6 +136,25 @@
           </div>
         </section>
 
+        <section id="tm-appearance-correction" class="tm-panel"
+          aria-labelledby="tm-correct-appearance-title" hidden>
+          <h3 id="tm-correct-appearance-title">Correct a recorded participant</h3>
+          <p>Organizer-only correction when a player or substitute was recorded incorrectly.
+            Completed games retain their results and participation totals are recalculated.</p>
+          <div class="tm-form tm-inline">
+            <label>Game<select id="tm-correct-game"><option value="">Choose game…</option></select></label>
+            <label>Incorrect player
+              <select id="tm-incorrect-player"><option value="">Choose recorded player…</option></select>
+            </label>
+            <label>Correct player
+              <select id="tm-correct-player"><option value="">Choose replacement…</option></select>
+            </label>
+            <button type="button" id="tm-correct-appearance-save" class="tm-button tm-secondary">
+              Correct participant record
+            </button>
+          </div>
+        </section>
+
         <section class="tm-panel" aria-labelledby="tm-session-heading">
           <h3 id="tm-session-heading">Rotation and session</h3>
           <p>Only organizers may end a rotation early, publish the next rotation or close the session.</p>
