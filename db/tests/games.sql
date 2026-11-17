@@ -230,7 +230,10 @@ begin
       if (select winner_team_id from public.tm_games where id=v_game6)<>v_b then
         raise exception 'Completed five-team final result could not be corrected';
       end if;
-      -- Still reject changes to the opener with dependent games started.
+      -- Still reject changing the valid opposite opener winner after
+      -- its dependent games have started (not merely an invalid UUID).
+      select case when winner_team_id=team_a_id then team_b_id else team_a_id end
+        into v_b from public.tm_games where id=v_game1;
       begin
         perform public.tm_org_correct_winner(v_game1,v_b);
         raise exception 'Completed rotation bypassed dependent game safeguard';
