@@ -59,6 +59,9 @@ begin
     join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='public' and c.relkind in ('r','p')
       and c.relname like 'tm\_%' escape '\'
+      -- These throwaway concurrency fixture tables are not created by
+      -- the application SQL drafts or deployed to Supabase.
+      and c.relname not like 'tm\_test\_%' escape '\'
   loop
     v_tables:=v_tables+1;
     if not v_table.relrowsecurity then
