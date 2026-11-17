@@ -316,9 +316,11 @@ begin
   end if;
 end $$;
 
--- Organizer correction is allowed only while downstream matches depending
--- on that first-round result have NOT started. For four-team round robin,
--- winners never affect later pairings.
+-- Organizer correction is allowed while downstream matches depending
+-- on an opening result have NOT started. Last-round games remain correctable
+-- even after a six-game rotation automatically becomes 'completed', while
+-- the event-day session is still active. Four-team round-robin pairings do
+-- not depend on winners, so their results can be corrected independently.
 create function public.tm_org_correct_winner(
   p_game_id uuid,p_winner_team_id uuid
 )
@@ -339,7 +341,8 @@ begin
   from public.tm_games g
   join public.tm_rotations r on r.id=g.rotation_id
   join public.tm_sessions s on s.id=r.session_id
-  where g.id=p_game_id and s.status='active' and r.status='published'
+  where g.id=p_game_id and s.status='active'
+    and r.status in ('published','completed')
   for update of s;
   if not found then
     raise exception 'No active published game to correct'
