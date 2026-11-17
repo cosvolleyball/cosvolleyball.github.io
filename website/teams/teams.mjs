@@ -44,9 +44,12 @@ const state = {
   pendingRefresh: false,
   pendingForcePrivate: false
 };
-const statuses = ["candidate", "present", "waiting", "break", "departed"];
-const readableStatus = s => ({candidate:"Not checked in",present:"Present",
-  waiting:"Waiting",break:"On break",departed:"Departed"}[s] || "Unknown");
+const statuses = ["present", "candidate", "absent", "waiting", "break", "departed"];
+const readableStatus = s => ({candidate:"Not included",present:"Included",
+  absent:"No-show",waiting:"Waiting",break:"On break",departed:"Departed"}[s] || "Unknown");
+const sourceLabel = status => ({
+  registered:"Registered",waitlisted:"Waitlisted"
+}[status] || "Walk-in");
 
 function feedback(message, isError = false) {
   const el = $("tm-feedback");
@@ -284,21 +287,31 @@ function formatStats(stats) {
 }
 function renderRoster() {
   const host = $("tm-roster");
-  $("tm-roster-count").textContent = state.roster.filter(p=>
-    ["present","waiting"].includes(p.attendance)).length + " available";
+  const available=state.roster.filter(p=>["present","waiting"].includes(p.attendance)).length;
+  const excluded=state.roster.filter(p=>p.attendance==="absent").length;
+  const pending=state.roster.filter(p=>p.attendance==="candidate").length;
+  $("tm-roster-count").textContent=
+    available+" available · "+excluded+" no-shows · "+pending+" pending";
   if (!state.roster.length) {
     host.innerHTML = '<p class="tm-muted">No registered players were imported. Add walk-ins below.</p>';
     return;
   }
   host.innerHTML = `<table>
-    <thead><tr><th>Player</th><th>Attendance</th><th>Skill (1–10)</th>
+    <thead><tr><th>Player</th><th>Event list</th><th>Included for teams?</th>
+      <th>Quick action</th><th>Skill (1–10)</th>
       <th>Gender</th><th>Preferred positions (max 2)</th><th>Save profile</th></tr></thead>
     <tbody>${state.roster.map(p=>`<tr data-player-row="${escapeHtml(p.id)}">
       <td>${escapeHtml(p.name)}</td>
+      <td>${escapeHtml(sourceLabel(p.source_status))}</td>
       <td><label class="tm-sr-only" for="att-${escapeHtml(p.id)}">Attendance for ${escapeHtml(p.name)}</label>
       <select id="att-${escapeHtml(p.id)}" data-attendance="${escapeHtml(p.id)}">
       ${statuses.map(st=>`<option value="${st}" ${st===p.attendance?"selected":""}>${readableStatus(st)}</option>`).join("")}
       </select></td>
+      <td>${["present","waiting"].includes(p.attendance) ?
+        `<button type="button" class="tm-button tm-secondary tm-roster-save"
+          data-mark-no-show="${escapeHtml(p.id)}">Mark no-show</button>` :
+        `<button type="button" class="tm-button tm-secondary tm-roster-save"
+          data-include-player="${escapeHtml(p.id)}">Include</button>`}</td>
       <td><label class="tm-sr-only" for="skill-${escapeHtml(p.id)}">Skill for ${escapeHtml(p.name)}</label>
         <input id="skill-${escapeHtml(p.id)}" class="tm-skill" data-skill type="number"
         min="1" max="10" step="1" value="${p.skill ?? ""}"></td>
@@ -947,17 +960,26 @@ $("tm-assign-arrival").addEventListener("click",()=>void action(async()=>{
   feedback("Team roster adjusted. The updated assignment is now public.");
   await refresh(true);
 }));
+async function updateAttendance(playerId,status) {
+  await rpc("tm_org_set_attendance",{
+    p_session_player_id:playerId,p_attendance:status
+  });
+  state.draft=null;state.savedDraftId=null;state.undoStack=[];
+  feedback(status==="absent" ? "No-show excluded from future team assignments." :
+    status==="present" ? "Player included in the available roster." :
+    "Attendance updated.");
+  await refresh(true);
+}
 $("tm-roster").addEventListener("change",e=>{
   const id=e.target.dataset.attendance;
   if(!id)return;
-  void action(async()=>{
-    await rpc("tm_org_set_attendance",{
-      p_session_player_id:id,p_attendance:e.target.value
-    });
-    state.draft=null;state.savedDraftId=null;state.undoStack=[];
-    feedback("Attendance updated.");
-    await refresh(true);
-  });
+  void action(()=>updateAttendance(id,e.target.value));
+});
+$("tm-roster").addEventListener("click",e=>{
+  const absent=e.target.closest("[data-mark-no-show]");
+  const included=e.target.closest("[data-include-player]");
+  if(absent)void action(()=>updateAttendance(absent.dataset.markNoShow,"absent"));
+  if(included)void action(()=>updateAttendance(included.dataset.includePlayer,"present"));
 });
 $("tm-roster").addEventListener("click",e=>{
   const id=e.target.closest("[data-save-profile]")?.dataset.saveProfile;
