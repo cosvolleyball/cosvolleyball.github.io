@@ -56,7 +56,7 @@ This is not a complete release acceptance: actual Realtime WebSocket delivery, m
 - [ ] Late arrivals, breaks, departures and replacements never force early reshuffle or interrupt ongoing matches.
 - [ ] Emergency injury replacement in a six-team game preserves both players' actual appearances, counting borrowed subs separately.
 - [ ] No canceled/unplayed game creates a phantom appearance. Organizer-only session statistics do not affect new session counts.
-- [ ] Broadcast signals trigger prompt refresh but carry only revision number and active/inactive flag. Lost connections and backgrounded phones recover automatically.
+- [ ] The PostgreSQL broadcast sends **only revision and active/inactive flag**; the Realtime service may add an opaque message `id` to the received WebSocket payload. Confirm no player data appears, prompt refresh works and lost connections/backgrounded phones recover automatically.
 - [ ] Full original website regression tests remain green, including organizer login, registration, cancellation, waitlist, payments, restrictions and email workflows.
 
 ## Security-specific checks
@@ -65,7 +65,7 @@ This is not a complete release acceptance: actual Realtime WebSocket delivery, m
 - [ ] Verify public Broadcast contains ONLY revision and active fields; private Teams Manager rows must not be published to Realtime or exposed through direct Data API table reads.
 - [ ] Verify real database Broadcast with and without today's message partition; a Broadcast failure must never prevent valid gameplay changes.
 - [ ] Stress-test malformed UUIDs, duplicate requests, stale client revisions, player double-booking, and simultaneous cross-court updates.
-- [ ] Anonymous match and roster actions are deliberately allowed, but a public no-login action cannot cryptographically prove player consent. Review abuse cases, practical rate limits and organizer recovery.
+- [ ] Anonymous match and roster actions are deliberately allowed, but a public no-login action cannot cryptographically prove player consent. Review abuse cases, organizer recovery, and the conservative 120 public actions/session/minute and 40 actions/game/minute database guard; test that blocked actions roll back completely and legitimate event activity is not disrupted.
 - [ ] Test the pinned Supabase browser SDK against supported browsers, actual iPhones/Android phones, and the site's CSP.
 - [ ] Verify no API error exposes secret credentials, private profiles or sensitive database information.
 
