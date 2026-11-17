@@ -1,0 +1,42 @@
+name: Teams Manager Browser Smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'website/teams/**'
+      - 'tests/browser/**'
+      - '.github/workflows/team-manager-browser-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: teams-manager-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chromium-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Check out development branch
+        uses: actions/checkout@v4
+
+      - name: Install Node for browser test runner
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install exact pinned Playwright version for disposable CI
+        run: npm install --prefix tests/browser --no-audit --no-fund
+
+      - name: Install headless Chromium and Linux dependencies
+        run: ./tests/browser/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Validate browser test syntax
+        run: node --check tests/browser/smoke.mjs
+
+      - name: Test actual narrow and desktop viewport controls with fake Supabase client
+        run: node tests/browser/smoke.mjs
