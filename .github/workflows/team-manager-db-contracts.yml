@@ -93,3 +93,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/concurrency_transfer_setup.sql
       - name: Ensure independent public transfer requests cannot move the same player twice
         run: bash db/tests/concurrency_transfer.sh
+      - name: Install local-only public write rate-limiter draft
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_public_limits.sql
+      - name: Verify bounded public activity and atomic rejection
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/abuse_limits.sql
