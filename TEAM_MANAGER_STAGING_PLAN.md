@@ -36,7 +36,7 @@ The current live website and Supabase project must stay unchanged.
 ## Functional acceptance matrix
 
 - [ ] Event picker loads public/private published source events, without altering original registrations, waitlists, payments, organizer access or emails.
-- [ ] Registered/waitlisted players import as unchecked candidates; canceled entries are not automatically players. Walk-ins join without registering.
+- [ ] Confirmed event registrations import **already included as available**; waitlisted players remain visible but excluded pending organizer inclusion; canceled entries are not imported. One-click no-show removes a player from the team's eligible pool and one-click Include restores them. Walk-ins join without registering. The official COS Volleyball registrations, waitlists and payments remain unchanged.
 - [ ] Normalized email matches a persistent profile, optional skill 1–10, optional gender, and at most two preferred positions. All private attributes inaccessible to anonymous users.
 - [ ] 16 available → four teams of four for a full 4v4 round robin, with no borrowing from resting teams.
 - [ ] 25 available → four teams of 7/6/6/6 playing 6v6. An extra teammate rotates into a live game and is counted as an actual regular participant.
