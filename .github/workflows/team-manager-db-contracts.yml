@@ -97,3 +97,5 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_public_limits.sql
       - name: Verify bounded public activity and atomic rejection
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/abuse_limits.sql
+      - name: Enumerate and audit privileges on all Teams Manager tables and RPCs
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/security_matrix.sql
