@@ -115,7 +115,13 @@ begin
       )
     then 'ready' else 'scheduled' end
   where g.rotation_id=p_rotation_id and g.status in ('scheduled','ready');
-end $$;
+end $;
+
+-- The internal scheduler is called exclusively from audited SECURITY DEFINER
+-- RPCs. Revoking default PUBLIC EXECUTE is defense-in-depth even though
+-- tm_internal is not exposed in PostgREST and its schema USAGE is denied.
+revoke execute on function tm_internal.refresh_slots(uuid)
+  from public,anon,authenticated;
 
 -- A game can be started publicly only after its participants are available.
 -- For six-team sessions, the resting team on the SAME court can lend
