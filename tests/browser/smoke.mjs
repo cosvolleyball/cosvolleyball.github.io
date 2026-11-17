@@ -62,7 +62,8 @@ function sample(count){
 const fakeModule="export function createClient(){return window.__teamsBrowserClient;}";
 const browser=await chromium.launch({headless:true,args:["--no-sandbox"]});
 
-async function openPage({snapshot,organizer=false,width=1280,height=850,roster=[]}={}){
+async function openPage({snapshot,organizer=false,width=1280,height=850,
+  roster=[],lineups={}}={}){
   const context=await browser.newContext({
     viewport:{width,height},deviceScaleFactor:width<500?2:1,
     isMobile:width<500,hasTouch:width<500
@@ -70,7 +71,7 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,roster=[
   const page=await context.newPage();
   const errors=[];
   page.on("pageerror",e=>errors.push(e.message));
-  await page.addInitScript(({snapshot,organizer,roster})=>{
+  await page.addInitScript(({snapshot,organizer,roster,lineups})=>{
     window.confirm=()=>true;
     window.TEAMS_MANAGER_STAGING_CONFIG={
       url:"https://invalid-for-browser-tests.example",
@@ -78,6 +79,7 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,roster=[
     };
     window.__teamsSnapshot=snapshot;
     window.__teamsRoster=roster;
+    window.__teamsLineups=lineups;
     window.__teamsCalls=[];
     let changedCallback;
     window.__teamsBrowserClient={
@@ -123,9 +125,13 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,roster=[
         if(name==="tm_org_roster"){
           return {data:structuredClone(window.__teamsRoster),error:null};
         }
+        if(name==="tm_public_game_lineup"){
+          return {data:structuredClone(window.__teamsLineups[args.p_game_id]||[]),
+            error:null};
+        }
         if(name==="tm_org_stats"||name==="tm_org_teammate_pairs"||
            name==="tm_org_transfers"||name==="tm_org_game_appearances"||
-           name==="tm_public_game_subs"||name==="tm_public_game_lineup"){
+           name==="tm_public_game_subs"){
           return {data:[],error:null};
         }
         if(name==="tm_public_start_game"){
@@ -151,7 +157,7 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,roster=[
         return {data:null,error:null};
       }
     };
-  },{snapshot,organizer,roster});
+  },{snapshot,organizer,roster,lineups});
   await page.route("https://esm.sh/**",route=>route.fulfill({
     status:200,contentType:"text/javascript",
     headers:{"access-control-allow-origin":"*"},
@@ -201,6 +207,46 @@ try {
     assert.deepEqual(mobile.errors,[]);
     console.log("PASS Chromium mobile 390px six-team game start/winner flow");
   }finally{await mobile.context.close();}
+
+  // A seven-person 6v6 roster shares an on-court spot: the seventh
+  // teammate enters mid-game and counts as regular participation, not
+  // a resting-team borrowed substitute.
+  const sharedRole=sample(4);
+  sharedRole.format=6;
+  sharedRole.games[0].status="playing";
+  sharedRole.teams[0].players=Array.from({length:7},(_,i)=>({
+    id:"middle-"+i,name:i===6?"Fictional Libero":"Fictional Middle "+i
+  }));
+  sharedRole.teams[1].players=Array.from({length:6},(_,i)=>({
+    id:"other-"+i,name:"Other teammate "+i
+  }));
+  const activeLineup=[
+    ...sharedRole.teams[0].players.slice(0,6).map(p=>({
+      player_id:p.id,name:p.name,team_id:"t1",is_substitute:false
+    })),
+    ...sharedRole.teams[1].players.map(p=>({
+      player_id:p.id,name:p.name,team_id:"t2",is_substitute:false
+    }))
+  ];
+  const seven=await openPage({snapshot:sharedRole,width:390,height:844,
+    lineups:{g1:activeLineup}});
+  try{
+    const page=seven.page;
+    await page.locator('[data-rotate-out="g1-t1"]').waitFor();
+    await verifyNoPageOverflow(page,"390px seven-player 6v6 lineup rotation");
+    await page.locator('[data-rotate-out="g1-t1"]').selectOption("middle-0");
+    await page.locator('[data-rotate-in="g1-t1"]').selectOption("middle-6");
+    await page.locator(
+      '[data-tm-game-action="rotate-teammate"][data-team-id="t1"]').click();
+    await page.waitForFunction(()=>
+      window.__teamsCalls.some(c=>c.name==="tm_public_rotate_teammate"));
+    const calls=await page.evaluate(()=>window.__teamsCalls);
+    assert(calls.some(c=>c.name==="tm_public_rotate_teammate"&&
+      c.args.p_out_player_id==="middle-0"&&
+      c.args.p_in_player_id==="middle-6"));
+    assert.deepEqual(seven.errors,[]);
+    console.log("PASS Chromium mobile seven-player 6v6 regular in-game teammate rotation");
+  }finally{await seven.context.close();}
 
   const five=await openPage({snapshot:sample(5),width:390,height:844});
   try{
