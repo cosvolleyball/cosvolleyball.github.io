@@ -62,7 +62,7 @@ create table public.tm_session_players (
   registration_id uuid references public.registrations(id) on delete set null,
   display_name text not null check (length(btrim(display_name)) between 1 and 100),
   attendance text not null default 'candidate'
-    check (attendance in ('candidate', 'present', 'waiting', 'break', 'departed')),
+    check (attendance in ('candidate', 'present', 'waiting', 'absent', 'break', 'departed')),
   joined_at timestamptz not null default now(),
   unique (session_id, profile_id),
   unique (session_id, registration_id),
@@ -269,10 +269,16 @@ begin
     r.created_at asc, r.id asc
   on conflict (email) do nothing;
 
+  -- Confirmed registrations are presumed present, saving the organizer
+  -- from checking everyone in individually. Waitlisted players are visible
+  -- in the roster but excluded from teams until explicitly included.
+  -- Absence/walk-ins are tracked here ONLY, never in registrations/payments.
   insert into public.tm_session_players
-    (session_id, profile_id, registration_id, display_name)
+    (session_id, profile_id, registration_id, display_name, attendance)
   select distinct on (p.id)
-    v_session, p.id, r.id, btrim(r.player_name)
+    v_session, p.id, r.id, btrim(r.player_name),
+    case when r.registration_status='registered'
+      then 'present' else 'candidate' end
   from public.registrations r
   join public.tm_profiles p on p.email = lower(btrim(r.player_email))
   where r.event_id = p_event_id
@@ -383,7 +389,7 @@ begin
     raise exception 'Organizer access required' using errcode = '42501';
   end if;
   if p_attendance is null or p_attendance not in
-      ('candidate', 'present', 'waiting', 'break', 'departed') then
+      ('candidate', 'present', 'waiting', 'absent', 'break', 'departed') then
     raise exception 'Invalid attendance status' using errcode = '22023';
   end if;
   select s.id into v_session
@@ -423,11 +429,13 @@ begin
     'gender', p.gender,
     'positions', p.positions,
     'attendance', sp.attendance,
+    'source_status', r.registration_status,
     'registration_id', sp.registration_id
   ) order by sp.display_name,sp.id), '[]'::jsonb)
   into v_result
   from public.tm_session_players sp
   join public.tm_profiles p on p.id = sp.profile_id
+  left join public.registrations r on r.id = sp.registration_id
   where sp.session_id = p_session_id;
   return coalesce(v_result, '[]'::jsonb);
 end $$;
