@@ -6,7 +6,9 @@
 
 - Add a **Teams Manager** link in the existing navigation, replacing the existing external **Teams** link; no second site or repo.
 - One shared public view of **one active session at a time**, attached to a published event selected by an authorized organizer. The source event may be public or private.
-- Import its registered **and waitlisted** players as candidates, but only organizer-confirmed **present and available** people participate. Walk-ins may be added without creating or changing registration or payment rows.
+- Use the **existing COS Volleyball Supabase project** and the organizer-selected event's actual `public.registrations` to populate the attendance review; **never** use the Tournament Builder database or create another independent player registry.
+- Import both registered and waitlisted entries (dedupe on normalized player email), excluding cancellations. **Confirmed registered players start included/assumed present** so the organizer does not have to individually check everyone in. **Waitlisted players appear in the roster but start excluded** until the organizer includes those who arrive.
+- Organizer handles **exceptions only**: one-click mark a no-show (excluded from team generation), restore an arrival to present, include a waitlisted player, and add/check-in walk-ins. No-shows, breaks and Teams Manager attendance changes affect only manager tables, **never** the official registration, waitlist, payment or finance records.
 - Registration order and waitlist promotion order do not determine team assignments or substitutions.
 - Registration, cancellation, payment, finance, email notification, access restriction and Supabase Cron workflows must remain unchanged.
 - When no session is active, show "No active volleyball session right now."
@@ -17,7 +19,7 @@
 - Persistent organizer-managed profile with a UUID and **normalized email unique lookup key** (lowercase + trim). The internal UUID survives an email change or merge.
 - Optional skill (integer 1–10), optional gender, and up to two preferred positions. Missing values never exclude a player or create assumed values.
 - Only organizers enter, update, or link profiles. Updates during an event affect future team generations, not games already underway.
-- Status for a session: available, waiting, resting/break, playing, departed. Attendance belongs to Teams Manager, independent of event registration's attendance/payment fields.
+- Attendance statuses include assumed present, pending/waitlisted, no-show/absent, waiting, break and departed. Attendance belongs to Teams Manager, independent of event registration's attendance/payment fields. Present/waiting are eligible for new teams; absent/pending are not.
 - Departures and breaks create openings; **do not reshuffle before the rotation ends**.
 - Returning from a break reclaims a temporarily substituted spot **between games** unless a late arrival has already filled the spot for the rotation. In that case the returning player is waiting.
 - Late arrivals wait when teams are full. They may fill an opening between games on an eligible team; never interrupt a live game. Marking a permanent replacement is different from recording a one-game substitute.
@@ -145,7 +147,7 @@ Concurrency: server-side validation and row locking/version checking for every s
 
 1. **Foundation (this branch):** inspected schema/site structure; tested pure scheduling invariants for 4/5/6 teams and organizer-only draft balancing; this living spec. No public link or production backend alterations.
 2. **Data contract and security:** foundation plus organizer draft/publish SQL review drafts are committed in `db/drafts/` and integrated against PostgreSQL 17 fixtures in CI. Still outstanding: the public game-action RPCs, concurrency tests, true Supabase staging/RLS verification, and migration review. **Nothing has been applied to production.**
-3. **Organizer experience (initial implementation):** the new isolated `website/teams/` page includes an event picker, attendance, walk-ins, profile editing, local draft generation/regeneration, swaps, moves, undo, private draft saving, explicit publish, early rotation closing and private session statistics. It is not production-tested and is not deployed.
+3. **Organizer experience (initial implementation):** the isolated `website/teams/` page includes an event picker, automatically included registered roster, visible but pending waitlist, one-click no-show/restore, walk-ins, private profile editing, local draft generation, swaps/moves/undo, private draft saving and explicit publish, early rotation close and private statistics. Not production-tested or deployed.
 4. **Public experience (initial implementation):** same-site navigation now links to the new Teams Manager; it renders sanitized active-session teams/courts and refreshes automatically at an 8-second interval. The feature branch now includes anonymous game start, winner reporting, same-court voluntary subs for six teams, five-team permanent transfers, emergency injury substitutions, ordinary in-game teammate rotations, and organizer corrections. These are backed by isolated PostgreSQL tests, **not yet staging or production verification**. Still missing: true realtime notification subscriptions, negative/security abuse testing, comprehensive concurrent connection tests, and real-device QA.
 5. **Unusual attendance and end-to-end QA:** 4v4/5v5/6v6 lineup capacities, player breaks, late/early movement, five-team court transitions, full real-device testing; release only when confirmed.
 
