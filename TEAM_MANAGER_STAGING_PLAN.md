@@ -18,7 +18,7 @@ The current live website and Supabase project must stay unchanged.
 
 A separate workflow, `.github/workflows/team-manager-local-supabase.yml`, now starts a **fully local, unlinked Supabase CLI/Docker stack** in GitHub Actions, applies a synthetic version of the existing COS Volleyball event/registration tables and all Teams Manager review SQL, then runs `db/tests/local_supabase_api.mjs` against actual local Supabase Auth and REST APIs. This workflow **passed on the feature branch**. It verifies organizer/non-organizer/anonymous authorization, confirmed-registration auto-inclusion, waitlist visibility without automatic inclusion, one-click no-show exclusion, walk-ins without source registration writes, private draft/publish, and winner-submission validation. No hosted Supabase project is used.
 
-This is not a complete release acceptance: actual Realtime WebSocket delivery, malicious-request throttling, full real-device QA and compatibility with every production schema constraint still require deliberate validation. Neither hosted Supabase project nor GitHub Pages was changed.
+Local Realtime WebSocket delivery and atomic public-action rate-limit rejection have also passed automated integration checks. This is not complete release acceptance: physical-device QA, deeper abuse/recovery testing and compatibility with every production schema constraint still require deliberate validation. Neither hosted Supabase project nor GitHub Pages was changed.
 
 ## Local staging setup — no new Supabase account/project
 
@@ -34,6 +34,7 @@ This is not a complete release acceptance: actual Realtime WebSocket delivery, m
    - db/drafts/event_day_manager_emergency.sql
    - db/drafts/event_day_manager_intra_team_rotation.sql
    - db/drafts/event_day_manager_realtime.sql
+   - db/drafts/event_day_manager_public_limits.sql
 4. Validate actual Auth/JWT roles, RLS rules, SECURITY DEFINER grants and PostgREST exposure; run current Supabase security/performance advisors and fix relevant findings.
 5. Serve a temporary preview from the feature branch pointing only to the locally running Supabase services. A nonproduction hostname refuses a connection unless `window.TEAMS_MANAGER_STAGING_CONFIG` contains the **local API URL and local publishable/anon key**, set before teams.mjs loads. The local credentials are emitted by `supabase status`. Never use a service_role or secret key in client code, and never point previews at either hosted production project. If the local site is accessed from a phone, use an isolated trusted network or port-forwarding arrangement and do not expose the local Supabase stack publicly.
 6. Exercise the manager with two browser sessions (one authorized organizer, one anonymous), then simultaneous anonymous clients on distinct devices. Verify real Broadcast delivery, reconnection and the polling fallback.
@@ -78,7 +79,7 @@ This is not a complete release acceptance: actual Realtime WebSocket delivery, m
 
 ## Release blockers
 
-1. Real local Supabase JWT/RLS/PostgREST/Broadcast integration testing against a completely isolated CLI/Docker stack; no third hosted project needed.
+1. Keep the real local Supabase JWT/RLS/PostgREST/Broadcast integration checks green on the final release candidate; this suite has passed on the feature branch. No third hosted project is needed.
 2. Mobile-device verification on an appropriately isolated test network, without connecting previews to production.
 3. Deliberate testing of abuse/rate-limit recovery for public no-login actions.
 4. Independent code review, clean migration/rollback documentation, then explicit production deployment approval.
