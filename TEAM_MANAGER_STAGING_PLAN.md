@@ -14,6 +14,12 @@ The automated SQL tests use disposable PostgreSQL 17 with a deliberately reduced
 
 The current live website and Supabase project must stay unchanged.
 
+## Automated local Supabase integration (verified)
+
+A separate workflow, `.github/workflows/team-manager-local-supabase.yml`, now starts a **fully local, unlinked Supabase CLI/Docker stack** in GitHub Actions, applies a synthetic version of the existing COS Volleyball event/registration tables and all Teams Manager review SQL, then runs `db/tests/local_supabase_api.mjs` against actual local Supabase Auth and REST APIs. This workflow **passed on the feature branch**. It verifies organizer/non-organizer/anonymous authorization, confirmed-registration auto-inclusion, waitlist visibility without automatic inclusion, one-click no-show exclusion, walk-ins without source registration writes, private draft/publish, and winner-submission validation. No hosted Supabase project is used.
+
+This is not a complete release acceptance: actual Realtime WebSocket delivery, malicious-request throttling, full real-device QA and compatibility with every production schema constraint still require deliberate validation. Neither hosted Supabase project nor GitHub Pages was changed.
+
 ## Local staging setup — no new Supabase account/project
 
 1. Use the current Supabase CLI and a Docker-compatible container runtime in a **separate, unlinked** local checkout or GitHub Actions test workspace. Review command arguments with the then-current CLI help. Run `supabase init` and `supabase start` locally (or `npx supabase init` / `npx supabase start` when installed as a dev dependency). **Never run `supabase link`, `db push --remote`, `db reset --linked`, or any remote mutation command.**
