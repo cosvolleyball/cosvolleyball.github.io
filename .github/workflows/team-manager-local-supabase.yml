@@ -80,7 +80,8 @@ jobs:
             event_day_manager_roster_adjustments.sql \
             event_day_manager_emergency.sql \
             event_day_manager_intra_team_rotation.sql \
-            event_day_manager_realtime.sql; do
+            event_day_manager_realtime.sql \
+            event_day_manager_public_limits.sql; do
             psql "$DB_URL" -X -v ON_ERROR_STOP=1 -1 -f "db/drafts/$file"
           done
 
