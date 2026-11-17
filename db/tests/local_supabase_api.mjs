@@ -72,9 +72,8 @@ const realtime=await subscribeToPublicTeams(api,anon);
 // Warm it with a SAFE synthetic signal; confirm it traverses the entire
 // local database -> Realtime -> anonymous WebSocket path before relying on
 // subsequent session notifications. No hosted projects or private data.
-const warmupSql="select realtime.send("+
-  "'{\\\"revision\\\":0,\\\"active\\\":false}'::jsonb,"+
-  "'changed','teams-manager:public',false)";
+const warmupSql = `select realtime.send('{"revision":0,"active":false}'::jsonb,
+  'changed','teams-manager:public',false)`;
 const sendWarmup=()=>{
   execFileSync("psql",[db,"-X","-v","ON_ERROR_STOP=1","-c",warmupSql],{
     stdio:"pipe",timeout:10000
