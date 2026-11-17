@@ -115,7 +115,7 @@ begin
       )
     then 'ready' else 'scheduled' end
   where g.rotation_id=p_rotation_id and g.status in ('scheduled','ready');
-end $;
+end $$;
 
 -- The internal scheduler is called exclusively from audited SECURITY DEFINER
 -- RPCs. Revoking default PUBLIC EXECUTE is defense-in-depth even though
