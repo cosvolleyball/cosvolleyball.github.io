@@ -13,6 +13,12 @@ on:
 permissions:
   contents: read
 
+# Local Docker image pulls are comparatively expensive. Cancel superseded
+# branch runs instead of making overlapping CI stacks fight for registry quota.
+concurrency:
+  group: teams-manager-local-supabase-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   local-supabase:
     runs-on: ubuntu-latest
