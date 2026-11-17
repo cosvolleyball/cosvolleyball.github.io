@@ -64,6 +64,12 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
     rpc:async(name,args)=>{
       calls.push({name,args});
       if(name==="tm_public_snapshot")return {data:snapshot,error:null};
+      if(name==="tm_org_set_attendance"){
+        const player=organizerRoster.find(p=>p.id===args?.p_session_player_id);
+        if(player)player.attendance=args.p_attendance;
+        snapshot={...snapshot,revision:(snapshot.revision||0)+1};
+        return {data:null,error:null};
+      }
       if(name==="tm_org_roster")return {data:organizerRoster,error:null};
       if(name==="tm_public_game_lineup")
         return {data:lineupByGame[args?.p_game_id]||[],error:null};
@@ -476,5 +482,85 @@ test("nonproduction preview without explicit staging config never opens a databa
     assert.match(t.dom.window.document.querySelector("#tm-public-content").textContent,
       /development preview is not connected/i);
     assert.equal(t.dom.window.document.querySelector("#tm-organizer").hidden,true);
+  }finally{t.close();}
+});
+
+test("event roster starts with registered players included and waitlist separately labeled",async()=>{
+  const t=await boot({organizer:true,initialSnapshot:{
+    active:true,session_id:"session",format:6,revision:1,
+    allowed_formats:[4,5,6],teams:[],games:[]
+  },organizerRoster:[
+    {id:"registered",name:"Registered Player",email:"registered@example.invalid",
+      source_status:"registered",attendance:"present",positions:[]},
+    {id:"waitlisted",name:"Waitlisted Player",email:"waitlisted@example.invalid",
+      source_status:"waitlisted",attendance:"candidate",positions:[]},
+    {id:"walkin",name:"Walk-in Player",email:"walkin@example.invalid",
+      source_status:null,attendance:"present",positions:[]}
+  ]});
+  try {
+    const doc=t.dom.window.document;
+    const grid=doc.querySelector("#tm-roster");
+    assert.match(grid.textContent,/Registered Player/);
+    assert.match(grid.textContent,/Waitlisted Player/);
+    assert.match(grid.textContent,/Walk-in Player/);
+    assert.equal(doc.querySelector('[data-attendance="registered"]').value,"present");
+    assert.equal(doc.querySelector('[data-attendance="waitlisted"]').value,"candidate");
+    assert.equal(doc.querySelector("#tm-roster-count").textContent,
+      "2 available · 0 no-shows · 1 pending");
+    assert.match(grid.textContent,/Registered/);
+    assert.match(grid.textContent,/Waitlisted/);
+    assert.match(grid.textContent,/Walk-in/);
+    assert(!t.calls.some(c=>c.name==="tm_org_set_attendance"),
+      "Opening the event roster must NOT require individual check-in calls");
+  }finally{t.close();}
+});
+
+test("one-click no-show removes a registered player, and Include restores eligibility",async()=>{
+  const t=await boot({organizer:true,initialSnapshot:{
+    active:true,session_id:"session",format:4,revision:1,
+    allowed_formats:[4,5,6],teams:[],games:[]
+  },organizerRoster:[{
+    id:"registered",name:"Registered Player",
+    email:"registered@example.invalid",
+    source_status:"registered",attendance:"present",positions:[]
+  }]});
+  try{
+    const doc=t.dom.window.document;
+    doc.querySelector('[data-mark-no-show="registered"]').click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_org_set_attendance"&&
+      c.args?.p_session_player_id==="registered"&&c.args?.p_attendance==="absent"));
+    assert.equal(doc.querySelector("#tm-roster-count").textContent,
+      "0 available · 1 no-shows · 0 pending");
+    assert.equal(doc.querySelector('[data-attendance="registered"]').value,"absent");
+
+    doc.querySelector('[data-include-player="registered"]').click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_org_set_attendance"&&
+      c.args?.p_session_player_id==="registered"&&c.args?.p_attendance==="present"));
+    assert.equal(doc.querySelector("#tm-roster-count").textContent,
+      "1 available · 0 no-shows · 0 pending");
+  }finally{t.close();}
+});
+
+test("waitlisted player can be included without altering official registration",async()=>{
+  const t=await boot({organizer:true,initialSnapshot:{
+    active:true,session_id:"session",format:4,revision:1,
+    allowed_formats:[4,5,6],teams:[],games:[]
+  },organizerRoster:[{
+    id:"waitlisted",name:"Waitlisted Player",
+    email:"waiting@example.invalid",source_status:"waitlisted",
+    attendance:"candidate",positions:[]
+  }]});
+  try{
+    const doc=t.dom.window.document;
+    doc.querySelector('[data-include-player="waitlisted"]').click();
+    await pause();
+    assert(t.calls.some(c=>c.name==="tm_org_set_attendance"&&
+      c.args?.p_attendance==="present"));
+    assert(!t.calls.some(c=>c.name.includes("registration")),
+      "Manager must never write to event registrations");
+    assert.equal(doc.querySelector("#tm-roster-count").textContent,
+      "1 available · 0 no-shows · 0 pending");
   }finally{t.close();}
 });
