@@ -1,0 +1,92 @@
+name: Teams Manager Local Supabase Integration
+
+# Disposable GitHub runner only. No hosted Supabase refs, credentials, or SQL.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'db/**'
+      - 'website/teams/**'
+      - '.github/workflows/team-manager-local-supabase.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+
+      - name: Node for local Auth and REST checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install maintained Supabase CLI v2
+        uses: supabase/setup-cli@v3
+        with:
+          version: v2.stable
+
+      - name: Install PostgreSQL client if necessary
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Initialize new, unlinked local project
+        run: |
+          test ! -e supabase/config.toml
+          supabase init
+          supabase --version
+          # Never run supabase link, db push or any --remote operation.
+
+      - name: Start local Docker-based Supabase
+        run: supabase start
+
+      - name: Capture local connection data without logging credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase status -o env > "$RUNNER_TEMP/team-manager-local.env"
+          for variable in API_URL DB_URL ANON_KEY SERVICE_ROLE_KEY; do
+            line="$(grep "^$variable=" "$RUNNER_TEMP/team-manager-local.env" | head -1)"
+            if [[ -z "$line" ]]; then
+              echo "Missing local Supabase status variable: $variable" >&2
+              exit 1
+            fi
+            value="$(printf '%s' "$line" | cut -d= -f2- | tr -d '"')"
+            echo "::add-mask::$value"
+            printf '%s=%s\n' "$variable" "$value" >> "$GITHUB_ENV"
+          done
+
+      - name: Apply synthetic COS Volleyball schema to local database only
+        run: psql "$DB_URL" -X -v ON_ERROR_STOP=1 -1 -f db/tests/local_supabase_baseline.sql
+
+      - name: Apply Teams Manager draft SQL to local database only
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            event_day_manager_foundation.sql \
+            event_day_manager_rotations.sql \
+            event_day_manager_game_actions.sql \
+            event_day_manager_player_actions.sql \
+            event_day_manager_team_history.sql \
+            event_day_manager_roster_adjustments.sql \
+            event_day_manager_emergency.sql \
+            event_day_manager_intra_team_rotation.sql \
+            event_day_manager_realtime.sql; do
+            psql "$DB_URL" -X -v ON_ERROR_STOP=1 -1 -f "db/drafts/$file"
+          done
+
+      - name: Test real local Auth/JWT, REST API, RLS and imported event attendance
+        run: node db/tests/local_supabase_api.mjs
+
+      - name: Destroy local testing containers and volumes
+        if: always()
+        run: supabase stop --no-backup || true
