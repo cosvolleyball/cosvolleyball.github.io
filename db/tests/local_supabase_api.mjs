@@ -1,6 +1,7 @@
 /** Verify Teams Manager against an unlinked, disposable local Supabase. */
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
+import {subscribeToPublicTeams} from "./local_realtime.mjs";
 const api=process.env.API_URL, db=process.env.DB_URL;
 const anon=process.env.ANON_KEY, svc=process.env.SERVICE_ROLE_KEY;
 if(!api||!db||!anon||!svc)throw Error("Missing local Supabase status env");
@@ -63,11 +64,19 @@ denied(await rpc("tm_org_start_session",{
   p_event_id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",p_format:4
 },nonOrganizer.token),"Non-organizer start session");
 
+// Subscribe anonymously BEFORE the session starts to verify that a
+// database trigger actually reaches connected Realtime users.
+const realtime=await subscribeToPublicTeams(api,anon);
+const firstNotice=realtime.waitFor(p=>p.active===true);
 const event="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const session=good(await rpc("tm_org_start_session",{
   p_event_id:event,p_format:4,p_balance_skill:true,
   p_balance_gender:false,p_balance_positions:false
 },organizer.token),"Start real local session");
+const opened=await firstNotice;
+assert.equal(opened.active,true);
+assert(Number.isInteger(opened.revision));
+assert(opened.revision>=1);
 let roster=good(await rpc("tm_org_roster",{
   p_session_id:session
 },organizer.token),"Read imported event roster");
@@ -135,6 +144,12 @@ good(await rpc("tm_public_report_winner",{
 denied(await rpc("tm_public_report_winner",{
   p_game_id:game.id,p_winner_team_id:game.team_b_id
 }),"Stale opposing winner");
+const lastNotice=realtime.waitFor(p=>p.active===false);
 good(await rpc("tm_org_end_session",{p_session_id:session},organizer.token),
   "End isolated session");
-console.log("PASS local Supabase Auth, RLS, REST, imported COS-style roster defaults, no-shows, waitlist and game actions");
+const closed=await lastNotice;
+assert.equal(closed.active,false);
+assert(realtime.received.length>=2,
+  "Real database Broadcast must reach anonymous clients on session start/end");
+realtime.close();
+console.log("PASS local Supabase Auth, RLS, REST, imported COS event roster, no-shows, waitlist, anonymous Realtime Broadcast and game actions");
