@@ -58,7 +58,9 @@
       </div>
       <div id="tm-org-empty" class="tm-panel">
         <h3>Start a session from an existing event</h3>
-        <p>Only checked-in players will be assigned to teams. This does not change registrations, waitlists or payments.</p>
+        <p>We'll load the event's existing registration list from Colorado Springs Pickup Volleyball.
+          Confirmed registrants are included automatically; waitlisted players appear for review.
+          Remove no-shows and add walk-ins without changing registrations, waitlists or payments.</p>
         <form id="tm-start-form" class="tm-form">
           <label>Source event<select id="tm-source-event" required><option value="">Choose event…</option></select></label>
           <label>Playing format<select id="tm-format" required>
@@ -79,7 +81,10 @@
             <h3 id="tm-roster-heading">Attendance and private player profiles</h3>
             <span id="tm-roster-count" class="tm-count"></span>
           </div>
-          <p>Player email, skill, gender, preferred positions and participation statistics are visible only to organizers.</p>
+          <p>Confirmed registrants start as available. Mark no-shows to exclude them, include
+            waitlisted players who turn up, and add walk-ins below. You do not need to check in
+            everyone individually. These changes affect only Teams Manager, not event registration.
+            Email, skill, gender, positions and participation statistics remain organizer-only.</p>
           <div id="tm-roster" class="tm-roster" aria-live="polite"></div>
           <h4>Add walk-in</h4>
           <form id="tm-walkin-form" class="tm-form tm-inline">
