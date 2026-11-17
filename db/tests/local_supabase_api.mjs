@@ -144,6 +144,33 @@ good(await rpc("tm_public_report_winner",{
 denied(await rpc("tm_public_report_winner",{
   p_game_id:game.id,p_winner_team_id:game.team_b_id
 }),"Stale opposing winner");
+// Against the disposable LOCAL database, saturate the shared public-write
+// budget to verify PostgREST exposes the limit and rolls back the rejected
+// request. An organizer must still be able to close the session.
+const otherGame=snapshot.games.find(g=>g.round===1&&g.court===2);
+assert(otherGame,"Expected an independent second-court opening game");
+assert.match(session,/^[a-f0-9-]{36}$/i);
+const actionNames="'start_game','report_winner','record_sub','cancel_sub',"+
+  "'transfer','emergency_sub','rotate_teammate'";
+const countSql="select count(*) from public.tm_action_audit "+
+  "where session_id='"+session+"' and action in ("+actionNames+") "+
+  "and recorded_at>clock_timestamp()-interval '60 seconds'";
+const existing=Number(execFileSync("psql",[db,"-X","-v","ON_ERROR_STOP=1",
+  "-At","-c",countSql],{encoding:"utf8",timeout:10000}).trim());
+assert(Number.isInteger(existing)&&existing<120);
+const fillSql="insert into public.tm_action_audit(session_id,action,details) "+
+  "select '"+session+"'::uuid,'record_sub',"+
+  "jsonb_build_object('game_id',gen_random_uuid()) "+
+  "from generate_series(1,"+(120-existing)+")";
+execFileSync("psql",[db,"-X","-v","ON_ERROR_STOP=1","-c",fillSql],{
+  stdio:"pipe",timeout:10000
+});
+const refused=await rpc("tm_public_start_game",{p_game_id:otherGame.id});
+denied(refused,"Rate-limited public game start");
+assert.match(JSON.stringify(refused.result),/Too many public game-day changes/i);
+const afterLimit=good(await rpc("tm_public_snapshot"),"Read after rejected start");
+assert.equal(afterLimit.games.find(g=>g.id===otherGame.id).status,"ready",
+  "Rate-limited public RPC must not partially start the game");
 const lastNotice=realtime.waitFor(p=>p.active===false);
 good(await rpc("tm_org_end_session",{p_session_id:session},organizer.token),
   "End isolated session");
