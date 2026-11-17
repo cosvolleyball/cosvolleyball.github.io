@@ -256,6 +256,28 @@ try {
     assert.deepEqual(desktop.errors,[]);
     console.log("PASS Chromium desktop organizer no-show/restore with no registration writes");
   }finally{await desktop.context.close();}
+
+  const organizerPhone=await openPage({snapshot:organizerSnapshot,
+    organizer:true,roster,width:390,height:844});
+  try{
+    const page=organizerPhone.page;
+    await page.locator('.tm-attendance-table [data-mark-no-show="registered"]').waitFor();
+    await verifyNoPageOverflow(page,"390px organizer attendance roster");
+    const layout=await page.locator(".tm-attendance-table tbody").evaluate(el=>
+      getComputedStyle(el).display);
+    assert.equal(layout,"grid","Mobile attendance should use stacked cards");
+    const action=await page.locator('[data-mark-no-show="registered"]').boundingBox();
+    assert(action&&action.x>=0&&action.x+action.width<=392,
+      "No-show action should fit within the mobile viewport without sideways scrolling");
+    await page.locator('[data-mark-no-show="registered"]').click();
+    await page.locator('[data-include-player="registered"]').waitFor();
+    await page.locator('[data-include-player="registered"]').click();
+    await page.waitForFunction(()=>
+      window.__teamsRoster.some(p=>p.id==="registered"&&p.attendance==="present"));
+    await verifyNoPageOverflow(page,"390px organizer after attendance correction");
+    assert.deepEqual(organizerPhone.errors,[]);
+    console.log("PASS Chromium mobile organizer stacked attendance/no-show/restore");
+  }finally{await organizerPhone.context.close();}
 }finally{
   await browser.close();
   await new Promise(resolve=>server.close(resolve));
