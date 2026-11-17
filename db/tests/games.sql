@@ -148,6 +148,20 @@ begin
       if v_min<>2 or v_max<>2 then
         raise exception '4v4 roster rotation should give 2 actual games per player, got %..%',v_min,v_max;
       end if;
+      -- Finished round robins must retain organizer result corrections:
+      -- all match pairings were predetermined, so no downstream rewiring.
+      select team_b_id into v_b from public.tm_games where id=v_game6;
+      perform public.tm_org_correct_winner(v_game6,v_b);
+      if (select winner_team_id from public.tm_games where id=v_game6)<>v_b
+        or (select status from public.tm_rotations where id=v_rotation)<>'completed'
+      then
+        raise exception 'Completed four-team final result could not be corrected';
+      end if;
+      select team_b_id into v_b from public.tm_games where id=v_game1;
+      perform public.tm_org_correct_winner(v_game1,v_b);
+      if (select winner_team_id from public.tm_games where id=v_game1)<>v_b then
+        raise exception 'Winner-independent opener could not be corrected';
+      end if;
     elsif v_team_count=6 then
       -- Six-team courts advance independently.
       if (select status from public.tm_games where id=v_game3)<>'ready' then
@@ -210,6 +224,18 @@ begin
         <> 'completed' then
         raise exception 'Five-team full rotation failed to complete';
       end if;
+      -- The final game is still correctable after the completed flag.
+      select team_b_id into v_b from public.tm_games where id=v_game6;
+      perform public.tm_org_correct_winner(v_game6,v_b);
+      if (select winner_team_id from public.tm_games where id=v_game6)<>v_b then
+        raise exception 'Completed five-team final result could not be corrected';
+      end if;
+      -- Still reject changes to the opener with dependent games started.
+      begin
+        perform public.tm_org_correct_winner(v_game1,v_b);
+        raise exception 'Completed rotation bypassed dependent game safeguard';
+      exception when sqlstate '22023' then null;
+      end;
     end if;
 
     if public.tm_public_snapshot()::text like '%@example.com%' then
