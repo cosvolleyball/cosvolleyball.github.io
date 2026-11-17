@@ -296,31 +296,31 @@ function renderRoster() {
     host.innerHTML = '<p class="tm-muted">No registered players were imported. Add walk-ins below.</p>';
     return;
   }
-  host.innerHTML = `<table>
+  host.innerHTML = `<table class="tm-attendance-table">
     <thead><tr><th>Player</th><th>Event list</th><th>Included for teams?</th>
       <th>Quick action</th><th>Skill (1–10)</th>
       <th>Gender</th><th>Preferred positions (max 2)</th><th>Save profile</th></tr></thead>
     <tbody>${state.roster.map(p=>`<tr data-player-row="${escapeHtml(p.id)}">
-      <td>${escapeHtml(p.name)}</td>
-      <td>${escapeHtml(sourceLabel(p.source_status))}</td>
-      <td><label class="tm-sr-only" for="att-${escapeHtml(p.id)}">Attendance for ${escapeHtml(p.name)}</label>
+      <td data-label="Player">${escapeHtml(p.name)}</td>
+      <td data-label="Event list">${escapeHtml(sourceLabel(p.source_status))}</td>
+      <td data-label="Available for teams"><label class="tm-sr-only" for="att-${escapeHtml(p.id)}">Attendance for ${escapeHtml(p.name)}</label>
       <select id="att-${escapeHtml(p.id)}" data-attendance="${escapeHtml(p.id)}">
       ${statuses.map(st=>`<option value="${st}" ${st===p.attendance?"selected":""}>${readableStatus(st)}</option>`).join("")}
       </select></td>
-      <td>${["present","waiting"].includes(p.attendance) ?
+      <td data-label="Attendance action">${["present","waiting"].includes(p.attendance) ?
         `<button type="button" class="tm-button tm-secondary tm-roster-save"
           data-mark-no-show="${escapeHtml(p.id)}">Mark no-show</button>` :
         `<button type="button" class="tm-button tm-secondary tm-roster-save"
           data-include-player="${escapeHtml(p.id)}">Include</button>`}</td>
-      <td><label class="tm-sr-only" for="skill-${escapeHtml(p.id)}">Skill for ${escapeHtml(p.name)}</label>
+      <td data-label="Skill (1–10)"><label class="tm-sr-only" for="skill-${escapeHtml(p.id)}">Skill for ${escapeHtml(p.name)}</label>
         <input id="skill-${escapeHtml(p.id)}" class="tm-skill" data-skill type="number"
         min="1" max="10" step="1" value="${p.skill ?? ""}"></td>
-      <td><label class="tm-sr-only" for="gender-${escapeHtml(p.id)}">Gender for ${escapeHtml(p.name)}</label>
+      <td data-label="Gender"><label class="tm-sr-only" for="gender-${escapeHtml(p.id)}">Gender for ${escapeHtml(p.name)}</label>
         <input id="gender-${escapeHtml(p.id)}" data-gender type="text" maxlength="40" value="${escapeHtml(p.gender || "")}"></td>
-      <td><label class="tm-sr-only" for="positions-${escapeHtml(p.id)}">Positions for ${escapeHtml(p.name)}</label>
+      <td data-label="Positions"><label class="tm-sr-only" for="positions-${escapeHtml(p.id)}">Positions for ${escapeHtml(p.name)}</label>
         <input id="positions-${escapeHtml(p.id)}" class="tm-position" data-positions type="text"
         placeholder="Setter, outside" value="${escapeHtml((p.positions||[]).join(", "))}"></td>
-      <td><button type="button" class="tm-button tm-secondary tm-roster-save"
+      <td data-label="Save profile"><button type="button" class="tm-button tm-secondary tm-roster-save"
         data-save-profile="${escapeHtml(p.id)}">Save</button></td>
     </tr>`).join("")}</tbody></table>`;
 }
