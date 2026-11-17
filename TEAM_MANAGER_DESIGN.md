@@ -155,7 +155,7 @@ Concurrency: server-side validation and row locking/version checking for every s
 
 - Validate **five-team permanent-transfer** timing, source-team lineup capacity, and fairness accounting with concurrent match-state tests; temporary substitutes are explicitly prohibited in this format.
 - Exercise **per-rotation format changes** across one session (e.g., 25 check-ins: 4 teams 6v6 then 6 teams 4v4) and ensure attendance, position-balancing toggles, and participation stats remain correct when player counts change.
-- Anonymous write abuse/rate-limit expectations and how to recover from malicious or mistaken player inputs.
+- Validate public-write burst caps (120/session/minute, 40/game/minute), recovery after rate limiting, and deliberate unauthorized attempts; anonymous actions cannot cryptographically prove player consent.
 - What should happen when teams cannot field enough players for a legitimate game; do not automatically steal from another court.
 
 These issues should be exercised in simulated rotations before database migrations or public launch.
