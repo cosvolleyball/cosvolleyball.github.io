@@ -114,14 +114,21 @@ declare
   v_session uuid;
   v_status text;
 begin
-  select s.id,g.status into v_session,v_status
+  select s.id into v_session
   from public.tm_games g
   join public.tm_rotations r on r.id=g.rotation_id
   join public.tm_sessions s on s.id=r.session_id
   where g.id=p_game_id and s.status='active'
     and r.status='published'
   for update of s;
-  if v_session is null or v_status<>'ready' then
+  -- A joined game's status can come from the statement snapshot taken
+  -- BEFORE waiting for the session lock. Read it again after obtaining
+  -- that lock so a concurrent start cannot be followed by a stale cancel.
+  select g.status into v_status
+  from public.tm_games g
+  join public.tm_rotations r on r.id=g.rotation_id
+  where g.id=p_game_id and r.status='published';
+  if v_session is null or v_status is distinct from 'ready' then
     raise exception 'Can only cancel substitutions before a game begins'
       using errcode='22023';
   end if;
