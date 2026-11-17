@@ -42,9 +42,22 @@ export async function subscribeToPublicTeams(apiUrl, key) {
       return;
     }
     if (msg.event !== "broadcast" || msg.payload?.event !== "changed") return;
-    // Never trust the client event; independently validate the schema.
-    assert.deepEqual(Object.keys(msg.payload.payload || {}).sort(), ["active", "revision"]);
-    messages.push(msg.payload.payload);
+    // The Postgres trigger sends only {revision, active}. Supabase
+    // Realtime may append its own opaque database-message "id" field.
+    // No user-controlled profile data, email or registration fields allowed.
+    const body = msg.payload.payload || {};
+    const keys = Object.keys(body).sort();
+    assert.deepEqual(keys, ["active", "id", "revision"]);
+    assert.equal(typeof body.active, "boolean");
+    assert(Number.isInteger(body.revision));
+    assert(body.id !== null && ["string", "number"].includes(typeof body.id));
+    const wire = JSON.stringify(body).toLowerCase();
+    for (const forbidden of ["email", "player", "gender", "skill", "position",
+      "registration", "@example", "session_id", "user_id"]) {
+      assert(!wire.includes(forbidden),
+        "Sensitive field leaked into public Broadcast: " + forbidden);
+    }
+    messages.push(body);
     for (const watcher of pending) watcher();
   }
   socket.addEventListener("open", () => {
