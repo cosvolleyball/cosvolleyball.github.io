@@ -77,8 +77,8 @@ begin
     'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',4::smallint,
     true,false,false);
   for v_i in 1..16 loop
-    perform public.tm_org_add_walkin(v_session,'Abuse test '+v_i,
-      'abuse-'+v_i+'@example.invalid');
+    perform public.tm_org_add_walkin(v_session,'Abuse test '||v_i,
+      'abuse-'||v_i||'@example.invalid');
   end loop;
   for v_i in 1..4 loop
     select jsonb_agg(id order by id) into v_members from (
