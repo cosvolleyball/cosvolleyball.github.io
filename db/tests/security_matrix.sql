@@ -36,9 +36,13 @@ begin
     end if;
     -- Every exposed Teams Manager function must pin search_path. Otherwise
     -- attacker-supplied objects could change resolution inside DEFINER SQL.
+    -- PostgreSQL serializes SET search_path='' as search_path="" in
+    -- pg_proc.proconfig on some versions. Verify the exact empty path,
+    -- accepting either representation rather than falsely rejecting it.
     if v_function.schema_name='public'
-       and (v_function.proconfig is null or not (
-         'search_path='=any(v_function.proconfig)
+       and (v_function.proconfig is null or not exists (
+         select 1 from unnest(v_function.proconfig) cfg
+         where cfg in ('search_path=', 'search_path=""')
        )) then
       raise exception 'Teams Manager function %.% has unsafe search_path',
         v_function.schema_name,v_function.proname;
