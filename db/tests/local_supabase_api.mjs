@@ -67,6 +67,29 @@ denied(await rpc("tm_org_start_session",{
 // Subscribe anonymously BEFORE the session starts to verify that a
 // database trigger actually reaches connected Realtime users.
 const realtime=await subscribeToPublicTeams(api,anon);
+// The realtime WebSocket channel can join before PostgreSQL's logical
+// replication broadcast feed has fully caught up after 'supabase start'.
+// Warm it with a SAFE synthetic signal; confirm it traverses the entire
+// local database -> Realtime -> anonymous WebSocket path before relying on
+// subsequent session notifications. No hosted projects or private data.
+const warmupSql="select realtime.send("+
+  "'{\\\"revision\\\":0,\\\"active\\\":false}'::jsonb,"+
+  "'changed','teams-manager:public',false)";
+const sendWarmup=()=>{
+  execFileSync("psql",[db,"-X","-v","ON_ERROR_STOP=1","-c",warmupSql],{
+    stdio:"pipe",timeout:10000
+  });
+};
+const warmupNotice=realtime.waitFor(p=>p.active===false && p.revision===0,25000);
+let warmupTimer;
+try{
+  sendWarmup();
+  warmupTimer=setInterval(sendWarmup,1800);
+  await warmupNotice;
+}finally{
+  if(warmupTimer)clearInterval(warmupTimer);
+}
+console.log("PASS local synthetic Realtime warmup notification");
 const firstNotice=realtime.waitFor(p=>p.active===true);
 const event="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const session=good(await rpc("tm_org_start_session",{
@@ -74,6 +97,7 @@ const session=good(await rpc("tm_org_start_session",{
   p_balance_gender:false,p_balance_positions:false
 },organizer.token),"Start real local session");
 const opened=await firstNotice;
+console.log("PASS realtime session-start notification");
 assert.equal(opened.active,true);
 assert(Number.isInteger(opened.revision));
 assert(opened.revision>=1);
@@ -175,6 +199,7 @@ const lastNotice=realtime.waitFor(p=>p.active===false);
 good(await rpc("tm_org_end_session",{p_session_id:session},organizer.token),
   "End isolated session");
 const closed=await lastNotice;
+console.log("PASS realtime session-end notification");
 assert.equal(closed.active,false);
 assert(realtime.received.length>=2,
   "Real database Broadcast must reach anonymous clients on session start/end");
