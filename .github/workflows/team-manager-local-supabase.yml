@@ -91,6 +91,9 @@ jobs:
             psql "$DB_URL" -X -v ON_ERROR_STOP=1 -1 -f "db/drafts/$file"
           done
 
+      - name: Audit all Teams Manager functions and private table grants in local Supabase
+        run: psql "$DB_URL" -X -v ON_ERROR_STOP=1 -f db/tests/security_matrix.sql
+
       - name: Test real local Auth/JWT, REST API, RLS and imported event attendance
         run: node db/tests/local_supabase_api.mjs
 
