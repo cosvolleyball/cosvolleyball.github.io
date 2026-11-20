@@ -239,6 +239,14 @@ try {
   const mobile=await openPage({snapshot:sample(6),width:390,height:844});
   try{
     const page=mobile.page;
+    const rosters=page.getByRole("region",{name:"Team rosters"});
+    await rosters.waitFor();
+    assert.equal(await rosters.getByRole("heading",{level:4}).count(),6);
+    const bounds=await rosters.boundingBox();
+    const courts=await page.locator("#tm-courts").boundingBox();
+    assert(bounds.y+bounds.height<=courts.y,"Rosters must appear above both courts");
+    await rosters.getByRole("link",{name:"Jump to courts"}).click();
+    assert.equal(new URL(page.url()).hash,"#tm-courts");
     await page.locator('[data-tm-game-action="start"][data-game-id="g1"]').waitFor();
     await verifyNoPageOverflow(page,"390px six-team public view");
     assert.equal(await page.locator("#tm-organizer").isVisible(),false);

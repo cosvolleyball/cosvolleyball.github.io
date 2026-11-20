@@ -246,13 +246,19 @@ function renderPublic() {
     </section>`;
   }).join("");
   const rosters = teams.map(team => `<article class="tm-team">
-    <h3>${escapeHtml(team.label)}</h3>
+    <h4>${escapeHtml(team.label)}</h4>
     <ul>${(team.players || []).map(p=>
       `<li>${escapeHtml(p.name)}</li>`).join("")}</ul>
   </article>`).join("");
   const markup = `<h3>${escapeHtml(s.event_title || "Volleyball session")}</h3>
-    <div class="tm-courts">${courts}</div>
-    <h3>Team rosters</h3><div class="tm-team-grid">${rosters}</div>
+    <section class="tm-published-rosters" aria-labelledby="tm-rosters-title">
+      <div class="tm-rosters-heading">
+        <h3 id="tm-rosters-title">Team rosters</h3>
+        <a href="#tm-courts">Jump to courts</a>
+      </div>
+      <div class="tm-team-grid">${rosters}</div>
+    </section>
+    <div class="tm-courts" id="tm-courts" tabindex="-1">${courts}</div>
     ${rotationTransferControls(teams,s)}`;
   if (container.dataset.rotation !== s.rotation_id) {
     container.innerHTML = markup;
