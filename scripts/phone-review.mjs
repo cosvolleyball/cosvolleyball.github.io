@@ -42,10 +42,10 @@ async function start() {
   // Initialization uses a unique local project ID. An existing stack on
   // these ports causes start to fail without editing that other stack.
   const migrations = path.join(root, 'db/release/migrations');
-  const [candidate] = readdirSync(migrations).filter(name => name.endsWith('_event_day_manager.sql'));
+  const releases = readdirSync(migrations).filter(name => /^\d+_.*\.sql$/.test(name)).sort()
+    .map(name => readFileSync(path.join(migrations, name), 'utf8'));
   const fixture = readFileSync(path.join(root, 'db/tests/local_supabase_baseline.sql'), 'utf8');
-  const release = readFileSync(path.join(migrations, candidate), 'utf8');
-  writeFileSync(path.join(directory, 'supabase', 'seed.sql'), ['begin;', fixture, release, 'commit;'].join('\n'));
+  writeFileSync(path.join(directory, 'supabase', 'seed.sql'), ['begin;', fixture, ...releases, 'commit;'].join('\n'));
   // Keep status output in memory. The CLI prints local service credentials on success.
   console.log('Starting the practice gym. The first run downloads the local Supabase containers.');
 

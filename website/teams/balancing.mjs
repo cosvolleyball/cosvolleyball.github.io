@@ -7,16 +7,16 @@
  * Weights are practical heuristics, not promises of perfect team equality.
  * Organizers can regenerate, swap and review before publishing.
  */
+import { coveredPositions, normalizedGender, normalizedPosition } from "./profile-options.mjs";
+
 const pairKey = (a, b) => JSON.stringify([a, b].sort());
 
-const frontRole = player => (player.positions||[]).some(p =>
-  ["middle","middle blocker","mb"].includes(normalized(p)));
-const backRole = player => (player.positions||[]).some(p =>
-  ["libero","defensive specialist","ds"].includes(normalized(p)));
-
 function pairedRoles(team) {
-  const front=team.filter(frontRole);
-  const back=team.filter(backRole);
+  // Prefer a specialist on each side of the pair, then fill either role with Flex.
+  const flex=team.filter(p=>p.positions?.some(role=>normalizedPosition(role)==="flex"));
+  const front=team.filter(p=>p.positions?.some(role=>normalizedPosition(role)==="middle")).concat(flex);
+  const back=team.filter(p=>p.positions?.some(role=>
+    ["libero","defensive specialist","ds"].includes(normalizedPosition(role)))).concat(flex);
   for(const a of front)for(const b of back)if(a.id!==b.id)return [a,b];
   return null;
 }
@@ -69,10 +69,6 @@ function avg(values) {
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
 }
 
-function normalized(value) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
 function scoreTeams(teams, options, pastPairs) {
   const { balanceSkill, balanceGender, balancePositions, teamCount } = options;
   let score = 0;
@@ -88,21 +84,21 @@ function scoreTeams(teams, options, pastPairs) {
   }
 
   for (const [enabled, getFeatures, weight] of [
-    [balanceGender, p => [normalized(p.gender)].filter(Boolean), 5],
-    [balancePositions,
-      p => [...new Set((p.positions || []).map(normalized).filter(Boolean))], 2.5]
+    [balanceGender, p => [normalizedGender(p.gender)].filter(Boolean), 5],
+    [balancePositions, coveredPositions, 2.5]
   ]) {
     if (!enabled) continue;
-    const labels = new Set(teams.flatMap(team => team.flatMap(getFeatures)));
+    const features = teams.map(team => team.map(getFeatures));
+    const labels = new Set(features.flat(2));
+    const totalPlayers = teams.reduce((sum, team) => sum + team.length, 0);
     for (const label of labels) {
-      const total = teams.reduce((sum, team) =>
-        sum + team.filter(p => getFeatures(p).includes(label)).length, 0);
-      const totalPlayers = teams.reduce((sum, team) => sum + team.length, 0);
-      for (const team of teams) {
-        const observed = team.filter(p => getFeatures(p).includes(label)).length;
-        const expected = total * (team.length / totalPlayers);
-        score += weight * (observed - expected) ** 2 / Math.max(1, team.length);
-      }
+      const counts = features.map(team => team.filter(roles => roles.includes(label)).length);
+      const total = counts.reduce((sum, count) => sum + count, 0);
+      counts.forEach((observed, i) => {
+        const size = teams[i].length;
+        const expected = total * size / totalPlayers;
+        score += weight * (observed - expected) ** 2 / size;
+      });
     }
   }
 

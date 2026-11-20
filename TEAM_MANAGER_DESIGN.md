@@ -7,7 +7,7 @@
 1. Under **Session controls**, choose a published **Source event**, select a playing format and click **Start session**. Both public and private events are available to organizers. During a session, the public manager displays the event title, published team rosters and court activity, including for an invitation-only source event.
 2. Confirmed registrations start **Included**. Waitlisted players start **Not included**. Canceled registrations are omitted. The import matches players by normalized email and gives a confirmed entry priority over a waitlist entry for the same person.
 3. Use **Mark no-show** for someone who is absent and **Include** for someone who arrives. For a walk-in, enter a name and email under **Add walk-in**, then select **Add and check in**. These attendance changes are recorded in the session roster. The event's registration, waitlist and payment records are maintained separately.
-4. Optional private profile fields include skill (1–10), gender and up to two preferred positions. Players with incomplete profiles can still play. Changes to balancing information apply the next time teams are generated.
+4. For optional private profiles, select a skill rating from 1 to 10 and a gender of Male or Female. Under **Preferred positions**, check up to two of Outside, Setter, Middle, Libero and Right side, or select **Flex** for someone who can play all five. Select **Save** on that player's row. These preferences apply when teams are next generated.
 
 ## Prepare and publish teams
 
@@ -49,7 +49,7 @@ Either players or organizers can select **Start game** on a ready game. At the e
 | --- | --- |
 | An extra teammate rotates in during a game | Under that game, choose the player leaving and the teammate entering. Both receive a regular appearance when the game is completed. Re-entry counts once. |
 | A six-team roster needs another player | Before starting the game, record an available volunteer from the resting team assigned to that court. A one-game substitute returns to their team afterward. The live game's emergency substitute control handles an injury. |
-| A five-team rotation needs a transfer | Between games, choose the player and destination team. Both teams must be idle and the source team must retain enough available players. The transfer lasts until the next reshuffle. |
+| A five-team rotation needs a transfer | **Five-team player transfers** appears when one idle team is below the playing format and another idle team can spare an available player. For example, in 5v5 a team with six can send one to a team with four. Choose the player and short team. The assignment lasts until the next reshuffle. |
 | A player takes a break, leaves or arrives late | The organizer updates attendance. Under **Late arrivals and replacements**, an eligible arrival can fill an open spot or replace an unavailable player between games. Other teams keep their assignments. |
 | A winner, transfer or appearance was recorded incorrectly | The organizer can correct a completed winner while the session is active if affected later games have not started. The session controls also include **Correct a five-team transfer** and **Correct a recorded participant**. |
 

@@ -2042,7 +2042,8 @@ body.organizer-view .admin-shell {
   min-height: calc(100vh - 176px)
 }
 
-body.organizer-view .site-nav .nav-organizer {
+body.organizer-view .site-nav .nav-organizer,
+.site-nav .nav-organizer.is-signed-in {
   background: #0b5261;
   color: #f0fbfd
 }

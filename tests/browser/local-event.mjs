@@ -24,15 +24,32 @@ try {
   }
   await player.goto(preview.href);
   await player.getByText('No active volleyball session right now.').waitFor();
+  await player.locator('nav').getByRole('link',{name:'Organizer Login',exact:true}).waitFor();
   await organizer.goto(new URL('/staging-login', preview).href);
   await organizer.locator('#password').fill(process.env.TM_PREVIEW_PASSWORD);
   await organizer.getByRole('button',{name:'Sign in'}).click();
+  await organizer.locator('nav a.is-signed-in').filter({hasText:'Organizer Dashboard'}).waitFor();
   await organizer.locator('#tm-source-event').selectOption('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
   await organizer.locator('#tm-start-form button[type="submit"]').click();
   await organizer.getByText('25 available · 0 no-shows · 1 pending',{exact:true}).waitFor();
   assert.equal(await organizer.locator('[data-player-row]').count(), 26);
   assert.equal(await organizer.locator('#tm-roster').getByText('Cancelled Player').count(), 0);
   const first = organizer.locator('[data-player-row]').filter({has:organizer.getByText('Practice Player 1',{exact:true})});
+  await first.locator('[data-skill]').selectOption('9');
+  await first.locator('[data-gender]').selectOption('female');
+  await first.locator('summary').click();
+  await first.getByLabel('Outside',{exact:true}).check();
+  await first.getByLabel('Setter',{exact:true}).check();
+  assert(await first.getByLabel('Middle',{exact:true}).isDisabled());
+  await first.getByLabel('Flex (all positions)',{exact:true}).check();
+  assert.equal(await first.locator('[data-position]:checked').count(),1);
+  await first.getByRole('button',{name:'Save',exact:true}).click();
+  await organizer.getByText('Player profile saved.',{exact:false}).waitFor();
+  await organizer.reload();
+  await first.locator('[data-position-summary]').filter({hasText:'Flex'}).waitFor();
+  assert.equal(await first.locator('[data-skill]').inputValue(),'9');
+  assert.equal(await first.locator('[data-gender]').inputValue(),'female');
+  await organizer.locator('nav a.is-signed-in').filter({hasText:'Organizer Dashboard'}).waitFor();
   await first.getByRole('button',{name:'Mark no-show'}).click();
   await organizer.getByText('24 available · 1 no-shows · 1 pending',{exact:true}).waitFor();
   await organizer.locator('#tm-walkin-name').fill('Practice Walk-in');
@@ -90,6 +107,27 @@ try {
   await publish(6,4);
   const smaller = await player.locator('#tm-public .tm-team').evaluateAll(cards=>cards.map(card=>card.querySelectorAll('li').length));
   assert.deepEqual(smaller.sort((a,b)=>b-a),[5,4,4,4,4,4]);
+  await organizer.locator('#tm-end-rotation').click();
+  await organizer.waitForFunction(()=>!document.querySelector('#tm-generate').disabled);
+  await publish(5,4);
+  const shortTeam = player.locator('#tm-public .tm-team').first();
+  const names = await shortTeam.locator('li').allTextContents();
+  assert.equal(names.length,5);
+  assert.equal(await player.locator('.tm-transfer').count(),0);
+  // Five players become four, then three. Only the second break opens a vacancy.
+  for (const [index,name] of names.slice(0,2).entries()) {
+    const row=organizer.locator('[data-player-row]').filter({has:organizer.getByText(name,{exact:true})});
+    await row.locator('[data-attendance]').selectOption('break');
+    await organizer.locator('#tm-roster-count').filter({hasText:(24-index)+' available'}).waitFor();
+  }
+  const transfer = player.locator('.tm-transfer');
+  await transfer.waitFor();
+  assert.equal(await transfer.locator('#tm-transfer-target option').count(),2);
+  await transfer.locator('#tm-transfer-target').selectOption({index:1});
+  await transfer.locator('#tm-transfer-player').selectOption({index:1});
+  await transfer.getByRole('button',{name:'Transfer until reshuffle'}).click();
+  await player.locator('#tm-feedback').filter({hasText:'Player transferred'}).waitFor();
+  await transfer.waitFor({state:'detached'});
   await organizer.locator('#tm-end-session').click();
   await player.getByText('No active volleyball session right now.').waitFor();
   await organizer.locator('#tm-final-stats').waitFor();
