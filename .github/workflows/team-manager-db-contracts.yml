@@ -1,0 +1,107 @@
+name: Teams Manager Database Contracts
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'db/**'
+      - '.github/workflows/team-manager-db-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  db-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: team_manager_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_only_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d team_manager_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: test_only_password
+      PGDATABASE: team_manager_test
+    steps:
+      - name: Check out PR
+        uses: actions/checkout@v4
+      - name: Ensure PostgreSQL client is present
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Build fake baseline schema (isolated container)
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/fixture.sql
+      - name: Install the manager foundation in the test database
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_foundation.sql
+      - name: Apply organizer draft and publication RPCs to test database ONLY
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_rotations.sql
+      - name: Verify permissions, roster import, privacy and existing event deletion
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/contracts.sql
+      - name: Verify private drafts, explicit publication and early rotation ending
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/rotations.sql
+      - name: Apply public game action RPCs in disposable database ONLY
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_game_actions.sql
+      - name: Test public starts, winners, cross-court dependencies and corrections
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/games.sql
+      - name: Apply public substitute/transfer RPCs in disposable DB ONLY
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_player_actions.sql
+      - name: Verify one-game subs, rotation-long transfers and appearances
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/player_actions.sql
+      - name: Apply organizer-only teammate history RPC locally
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_team_history.sql
+      - name: Verify history only counts actual shared completed games
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/history.sql
+      - name: Apply roster replacement RPC locally
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_roster_adjustments.sql
+      - name: Test late arrival and departure roster changes without midgame interruption
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/roster_adjustments.sql
+      - name: Apply emergency-injury and appearance correction RPCs locally
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_emergency.sql
+      - name: Test in-game injury exception and organizer substitution correction
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/emergency.sql
+      - name: Apply ordinary within-team in-game rotation RPC locally
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_intra_team_rotation.sql
+      - name: Test 25-player 6v6 with seven-person roster and role sharing
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/intra_team_rotation.sql
+      - name: Apply sanitized public broadcast trigger locally ONLY
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_realtime.sql
+      - name: Verify broadcast payload privacy and session invalidation behavior
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/realtime.sql
+      - name: Verify actual anon/authenticated Postgres role restrictions
+        run: bash db/tests/access_roles.sh
+      - name: Prepare active game for real two-connection concurrency tests
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/concurrency_setup.sql
+      - name: Race public game start and winner submission in independent connections
+        run: bash db/tests/concurrency.sh
+      - name: Reject substitute cancellation queued behind a game start
+        run: bash db/tests/concurrency_cancel_sub.sh
+      - name: Prepare five-team public transfer race in disposable database
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/concurrency_transfer_setup.sql
+      - name: Ensure independent public transfer requests cannot move the same player twice
+        run: bash db/tests/concurrency_transfer.sh
+      - name: Install public action limits in the test database
+        run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_public_limits.sql
+      - name: Verify bounded public activity and atomic rejection
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/abuse_limits.sql
+      - name: Enumerate and audit privileges on all Teams Manager tables and RPCs
+        run: psql -X -v ON_ERROR_STOP=1 -f db/tests/security_matrix.sql
+      - name: Reject queued changes after games or rotations close
+        run: python3 db/tests/concurrency_stale_actions.py
+      - name: Rehearse release migration and access rollback on a fresh local database
+        run: bash db/tests/release_artifacts.sh

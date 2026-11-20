@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#072b44">
+  <title>Teams Manager | Colorado Springs Pickup Volleyball</title>
+  <meta name="description" content="Live court assignments, teams and volleyball games at Colorado Springs Pickup Volleyball.">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="./teams.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-wrap">
+      <a class="brand" href="../" aria-label="Colorado Springs Pickup Volleyball home">
+        <img src="../favicon-192.png" alt="" width="53" height="53">
+        <span>COLORADO SPRINGS <strong>PICKUP VOLLEYBALL</strong></span>
+      </a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="../#events">Events</a>
+        <a href="./" aria-current="page">Teams Manager</a>
+        <a href="/tournament_builder/" target="_blank" rel="noopener noreferrer">Tournaments</a>
+        <a href="../?dashboard=1">Organizer Login</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="tm-page" id="main-content" tabindex="-1">
+    <div class="tm-heading">
+      <span class="section-kicker">VOLLEYBALL GAME DAY</span>
+      <h1>Teams Manager</h1>
+      <p>View the active session, team assignments and court rotation. This page updates automatically.</p>
+    </div>
+    <div id="tm-feedback" class="tm-feedback" role="status" aria-live="polite" hidden></div>
+
+    <section id="tm-public" aria-labelledby="tm-public-title">
+      <div class="tm-section-heading">
+        <h2 id="tm-public-title">Current session</h2>
+        <span class="tm-status" id="tm-status">Connecting…</span>
+      </div>
+      <div id="tm-public-content" aria-live="polite" aria-atomic="false">
+        <p class="tm-empty">Loading session…</p>
+      </div>
+      <p class="tm-footnote">Live updates refresh automatically. Private organizer information is never shown here.</p>
+    </section>
+
+    <!-- This entire panel is shown only after checking organizer membership.
+         Supabase organizer RPCs—not HTML visibility—enforce permission. -->
+    <section id="tm-organizer" class="tm-organizer" aria-labelledby="tm-organizer-title" hidden>
+      <div class="tm-section-heading">
+        <div>
+          <span class="section-kicker">AUTHORIZED ORGANIZERS ONLY</span>
+          <h2 id="tm-organizer-title">Session controls</h2>
+        </div>
+        <a href="../?dashboard=1">Organizer dashboard</a>
+      </div>
+      <div id="tm-org-empty" class="tm-panel">
+        <h3>Start a session from an existing event</h3>
+        <p>We'll load the event's existing registration list from Colorado Springs Pickup Volleyball.
+          Confirmed registrants are included automatically; waitlisted players appear for review.
+          Remove no-shows and add walk-ins without changing registrations, waitlists or payments.</p>
+        <form id="tm-start-form" class="tm-form">
+          <label>Source event<select id="tm-source-event" required><option value="">Choose event…</option></select></label>
+          <label>Playing format<select id="tm-format" required>
+            <option value="6">6v6</option><option value="5">5v5</option><option value="4">4v4</option>
+          </select></label>
+          <div class="tm-checks">
+            <label><input id="tm-balance-skill" type="checkbox" checked> Balance skill (1–10)</label>
+            <label><input id="tm-balance-gender" type="checkbox"> Balance gender</label>
+            <label><input id="tm-balance-positions" type="checkbox"> Balance positions (disabled for 4v4)</label>
+          </div>
+          <button type="submit" class="tm-button">Start session</button>
+        </form>
+      </div>
+
+      <div id="tm-org-active" hidden>
+        <section class="tm-panel" aria-labelledby="tm-roster-heading">
+          <div class="tm-section-heading">
+            <h3 id="tm-roster-heading">Attendance and private player profiles</h3>
+            <span id="tm-roster-count" class="tm-count"></span>
+          </div>
+          <p>Confirmed registrants start as available. Mark no-shows to exclude them, include
+            waitlisted players who turn up, and add walk-ins below. You do not need to check in
+            everyone individually. These changes affect only Teams Manager, not event registration.
+            Email, skill, gender, positions and participation statistics remain organizer-only.</p>
+          <div id="tm-roster" class="tm-roster" aria-live="polite"></div>
+          <h4>Add walk-in</h4>
+          <form id="tm-walkin-form" class="tm-form tm-inline">
+            <label>Player name<input id="tm-walkin-name" type="text" maxlength="100" required autocomplete="off"></label>
+            <label>Email<input id="tm-walkin-email" type="email" maxlength="254" required autocomplete="off"></label>
+            <button type="submit" class="tm-button tm-secondary">Add and check in</button>
+          </form>
+        </section>
+
+        <section id="tm-roster-adjust" class="tm-panel" aria-labelledby="tm-roster-adjust-title" hidden>
+          <h3 id="tm-roster-adjust-title">Late arrivals and replacements</h3>
+          <p>Between games, assign a newly arrived player to a vacant team spot
+            or permanently replace someone marked on break or departed.
+            A replaced player waits for the next reshuffle.</p>
+          <div class="tm-form tm-inline">
+            <label>Unassigned available player
+              <select id="tm-arrival-player"><option value="">Choose player…</option></select>
+            </label>
+            <label>Team to join
+              <select id="tm-arrival-team"><option value="">Choose team…</option></select>
+            </label>
+            <label>Unavailable player to replace (if needed)
+              <select id="tm-replace-player"><option value="">No replacement — fill an open spot</option></select>
+            </label>
+            <button type="button" id="tm-assign-arrival" class="tm-button tm-secondary">
+              Assign to team
+            </button>
+          </div>
+        </section>
+
+        <section class="tm-panel" aria-labelledby="tm-draft-title">
+          <h3 id="tm-draft-title">Generate balanced teams</h3>
+          <p>Before every reshuffle, choose how many teams and the on-court format.
+            Only currently checked-in and available players are included.
+            Preview, regenerate or make swaps before publishing.</p>
+          <div class="tm-checks">
+            <label><input id="tm-draft-balance-skill" type="checkbox" checked> Balance skill (1–10)</label>
+            <label><input id="tm-draft-balance-gender" type="checkbox"> Balance gender</label>
+            <label><input id="tm-draft-balance-positions" type="checkbox"> Balance positions (not for 4v4)</label>
+          </div>
+          <div class="tm-form tm-inline">
+            <label>Number of teams<select id="tm-team-count">
+              <option value="6">6 teams</option>
+              <option value="5">5 teams</option>
+              <option value="4">4 teams</option>
+            </select></label>
+            <label>Playing format<select id="tm-draft-format" aria-describedby="tm-distribution-summary">
+              <option value="6">6v6</option><option value="5">5v5</option>
+              <option value="4">4v4</option>
+            </select></label>
+            <button type="button" id="tm-generate" class="tm-button">Generate / regenerate</button>
+            <button type="button" id="tm-undo" class="tm-button tm-secondary" disabled>Undo last edit</button>
+          </div>
+          <p id="tm-distribution-summary" class="tm-muted" role="status" aria-live="polite">
+            Select a team count and playing format to see the distribution.
+          </p>
+          <div id="tm-draft" class="tm-draft" aria-live="polite">
+            <p class="tm-muted">No draft generated yet.</p>
+          </div>
+          <div class="tm-buttons">
+            <button type="button" id="tm-save-draft" class="tm-button tm-secondary" disabled>Save private draft</button>
+            <button type="button" id="tm-publish" class="tm-button" disabled>Publish teams</button>
+          </div>
+        </section>
+
+        <section id="tm-transfer-correction" class="tm-panel"
+          aria-labelledby="tm-transfer-correction-title" hidden>
+          <h3 id="tm-transfer-correction-title">Correct a five-team transfer</h3>
+          <p>Public transfers can be recorded once per player per rotation.
+            An organizer may correct a mistaken assignment between games,
+            without changing already recorded game appearances.</p>
+          <div class="tm-form tm-inline">
+            <label>Previously transferred player
+              <select id="tm-transfer-correction-player">
+                <option value="">Choose transferred player…</option>
+              </select>
+            </label>
+            <label>Correct team
+              <select id="tm-transfer-correction-team">
+                <option value="">Choose team…</option>
+              </select>
+            </label>
+            <button type="button" id="tm-transfer-correction-save"
+              class="tm-button tm-secondary">Correct transfer</button>
+          </div>
+        </section>
+
+        <section id="tm-appearance-correction" class="tm-panel"
+          aria-labelledby="tm-correct-appearance-title" hidden>
+          <h3 id="tm-correct-appearance-title">Correct a recorded participant</h3>
+          <p>Organizer-only correction when a player or substitute was recorded incorrectly.
+            Completed games retain their results and participation totals are recalculated.</p>
+          <div class="tm-form tm-inline">
+            <label>Game<select id="tm-correct-game"><option value="">Choose game…</option></select></label>
+            <label>Incorrect player
+              <select id="tm-incorrect-player"><option value="">Choose recorded player…</option></select>
+            </label>
+            <label>Correct player
+              <select id="tm-correct-player"><option value="">Choose replacement…</option></select>
+            </label>
+            <button type="button" id="tm-correct-appearance-save" class="tm-button tm-secondary">
+              Correct participant record
+            </button>
+          </div>
+        </section>
+
+        <section class="tm-panel" aria-labelledby="tm-session-heading">
+          <h3 id="tm-session-heading">Rotation and session</h3>
+          <p>Only organizers may end a rotation early, publish the next rotation or close the session.</p>
+          <div class="tm-buttons">
+            <button id="tm-end-rotation" type="button" class="tm-button tm-secondary" disabled>End rotation early</button>
+            <button id="tm-end-session" type="button" class="tm-button tm-danger">End session and view stats</button>
+          </div>
+          <div id="tm-stats" aria-live="polite"></div>
+        </section>
+      </div>
+      <section id="tm-final-stats" class="tm-panel" aria-labelledby="tm-final-stats-title" hidden>
+        <h3 id="tm-final-stats-title">Completed session — organizer statistics</h3>
+        <p>These figures are private and are not carried into future session totals.</p>
+        <div id="tm-final-stats-body"></div>
+      </section>
+    </section>
+  </main>
+  <footer class="site-footer"><span>© Colorado Springs Pickup Volleyball</span><span>Community play · Cost-sharing only</span></footer>
+  <script type="module" src="./teams.mjs"></script>
+</body>
+</html>

@@ -1,8 +1,8 @@
 # Website release and maintenance test checklist
 
-Run the GitHub Actions regression suite first. This checklist is for **targeted manual verification**, because JSDOM tests do not render real phone layouts, native calendar imports, email delivery or Supabase authorization.
+The GitHub Actions suites cover site logic, browser behavior and the local Supabase integration. These manual checks cover production release visibility, native calendar imports, accessibility and account-specific operations.
 
-**Safety:** Prefer existing safe/public pages. If a registration or database action needs testing, use a controlled event and an email you own; never alter real players' registrations or financial entries just to test a UI change.
+A signed-out visitor can verify public navigation and the current manager state. Tests that create or change records use an isolated practice session or a designated test event and test address.
 
 ## Deployment and public event pages
 
@@ -21,6 +21,13 @@ Run the GitHub Actions regression suite first. This checklist is for **targeted 
 - [ ] Existing check-in, payments and attendance display correctly on desktop and phones; avoid modifying real records during testing.
 - [ ] Restricted/banned player rules and the event audit history remain organizer-only.
 - [ ] Finance totals, host balances and historical transaction list load; do not create/void real finance entries as a smoke test.
+
+## Teams Manager
+
+- [ ] The homepage links to `/teams/`. Between sessions, a signed-out visitor sees **No active volleyball session right now**.
+- [ ] In the [practice gym](db/release/PHONE_REVIEW.md), confirmed players begin included, waitlisted players are pending, and attendance exceptions change the session roster.
+- [ ] A saved private draft becomes visible to the player browser after publication. Completing a game updates both browsers.
+- [ ] Closing the session returns the player page to idle and displays the organizer's participation summary.
 
 ## Registration, email and calendar
 
@@ -43,5 +50,5 @@ Run the GitHub Actions regression suite first. This checklist is for **targeted 
 ## Security and maintenance
 
 - [ ] No private records, management/invitation URLs, passwords, database credentials or mail-worker tokens are committed.
-- [ ] `BACKLOG.md` is up to date after release sign-off.
+- [ ] The operator and maintenance guides match the published controls.
 - [ ] If deployment fails, check the **specific failing step** before trying a fresh workflow. Do not rerun old SQL migrations or modify Supabase to fix a GitHub Pages publishing failure.

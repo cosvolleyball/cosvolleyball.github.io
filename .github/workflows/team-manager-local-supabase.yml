@@ -1,0 +1,59 @@
+name: Teams Manager Local Supabase Integration
+
+# Disposable GitHub runner only. No hosted Supabase refs, credentials, or SQL.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'db/**'
+      - 'website/teams/**'
+      - 'scripts/**'
+      - 'tests/browser/**'
+      - '.github/workflows/team-manager-local-supabase.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Local Docker image pulls are comparatively expensive. Cancel superseded
+# branch runs instead of making overlapping CI stacks fight for registry quota.
+concurrency:
+  group: teams-manager-local-supabase-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Node for local Auth and REST checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install maintained Supabase CLI v2
+        uses: supabase/setup-cli@v3
+        with:
+          version: v2.122.1
+
+      - name: Install PostgreSQL client if necessary
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Install Chromium for the full browser-to-database check
+        run: |
+          npm ci --prefix tests/browser --ignore-scripts --no-audit --no-fund
+          ./tests/browser/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Exercise the release and the actual phone rehearsal on an unlinked stack
+        run: |
+          python3 db/release/build_release.py --check
+          export TM_PREVIEW_PASSWORD="$(openssl rand -hex 16)"
+          echo "::add-mask::$TM_PREVIEW_PASSWORD"
+          node scripts/phone-review.mjs --ci

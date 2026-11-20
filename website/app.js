@@ -94,7 +94,7 @@ function notice(message, error=false) {
 }
 
 function unavailable() {
-  $("events").innerHTML = `<div class="empty-state"><h3>Almost ready to play</h3><p>Connect your Supabase project to load live events. Follow the setup guide included with this website.</p></div>`;
+  $("events").innerHTML = `<div class="empty-state"><h3>Events are temporarily unavailable</h3><p>Please try again later.</p></div>`;
 }
 
 // ── Upcoming events and private organizer listings ────────────────────────
