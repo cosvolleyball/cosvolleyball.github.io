@@ -2977,3 +2977,23 @@ input:focus, select:focus, textarea:focus {
 
 /* These small on-white labels previously used cyan below 4.5:1 contrast. */
 .signup-dialog-toolbar-label, .form-kicker { color: #006a75; }
+
+#registration-ban-dialog {
+  width: min(440px, calc(100vw - 28px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  border: 1px solid #dcb5c2;
+  border-top: 6px solid #862747;
+  border-radius: 16px;
+  padding: 0;
+  background: #fff7f9;
+  color: #452031;
+}
+#registration-ban-dialog::backdrop { background: rgb(34 14 24 / 65%); }
+.registration-ban-content { padding: clamp(20px, 5vw, 32px); }
+.registration-ban-content > .icon { width: 32px; height: 32px; color: #862747; }
+.registration-ban-content h2 { margin: 12px 0; font-size: 1.6rem; line-height: 1.15; }
+.registration-ban-content p { line-height: 1.5; }
+.registration-ban-content a { color: #77203e; text-decoration: underline; }
+.registration-ban-content .button { background: #77203e; color: white; }
+#registration-ban-reason, #registration-success-description { overflow-wrap: anywhere; white-space: pre-line; }

@@ -675,6 +675,28 @@ const results = [];
       true
     );
   });
+  await test("Ban popup shows only the current reason as plain text", async () => {
+    await boot();
+    assert.equal(await page.evaluate(async () => {
+      const byId = id => document.getElementById(id);
+      const dialog = byId("registration-ban-dialog");
+      dialog.showModal = function () { this.open = true; };
+      byId("player-email").value = "player@example.com";
+      for (const details of ["<b>Missed sessions</b>", "  "]) {
+        window.reply.register_for_open_gym = {error: {code: "VB001", details}};
+        byId("signup-form").dispatchEvent(new Event("submit", {cancelable: true}));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const reason = byId("registration-ban-reason");
+        if (!dialog.open || document.activeElement.id !== "registration-ban-title" ||
+            reason.hidden !== !details.trim() || reason.children.length ||
+            reason.textContent !== (details.trim() ? "Organizer’s reason: " + details : "") ||
+            !byId("signup-error").textContent.includes("banned") ||
+            byId("registration-success-dialog").open) return false;
+        dialog.open = false;
+      }
+      return true;
+    }), true);
+  });
   await test("Download button produces a calendar file only on a user click", async () =>
     assert.equal(
       await page.evaluate(() => {
