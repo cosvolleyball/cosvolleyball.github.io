@@ -78,7 +78,9 @@ def race(label, k, first, second):
             print('FAIL:',label,'was accepted after closure')
             return False
         # A semantic stale-state rejection, not an unrelated SQL/test error.
-        if not any(text in errors for text in ['active game','live game','active published','no longer active','Active published','eligible for lineup']):
+        expected = ['A transfer needs a short team'] if label == 'transfer-vacancy' else [
+            'active game','live game','active published','no longer active','Active published','eligible for lineup']
+        if not any(text in errors for text in expected):
             raise RuntimeError('Unexpected rejection: '+errors)
         print('PASS:',label)
         return True
@@ -93,7 +95,7 @@ if (os.environ.get('PGHOST') not in ('127.0.0.1', 'localhost')
     raise SystemExit('Run only in the local database contract fixture')
 
 results=[]
-for kind in ['emergency','teammate','appearance','roster','transfer','transfer-correction','end-rotation']:
+for kind in ['emergency','teammate','appearance','roster','transfer','transfer-correction','transfer-vacancy','end-rotation']:
     k=fixture(5 if kind.startswith('transfer') else 6,kind in ['emergency','teammate','appearance'])
     finish=f"select public.tm_org_end_rotation('{k['rotation']}',true)"
     if kind in ['emergency','teammate']:
@@ -107,9 +109,15 @@ for kind in ['emergency','teammate','appearance','roster','transfer','transfer-c
         incoming=sql(AUTH+f"select public.tm_org_set_attendance('{k['out']}','departed');select public.tm_org_add_walkin('{k['session']}','Late player','queued-late@example.invalid')").splitlines()[-1]
         queued=f"select public.tm_org_adjust_roster('{k['rotation']}','{incoming}','{k['team']}','{k['out']}')"
     elif kind.startswith('transfer'):
+        # All teams start with seven. Two breaks leave one open spot in 6v6.
+        sql(AUTH+f"""select public.tm_org_set_attendance(session_player_id,'break') from (
+            select session_player_id from public.tm_memberships where team_id='{k['other']}' limit 2) p""")
         if kind=='transfer-correction':
             sql(f"select public.tm_public_transfer('{k['rotation']}','{k['out']}','{k['other']}')")
             queued=f"select public.tm_org_correct_transfer('{k['rotation']}','{k['out']}','{k['team']}')"
+        elif kind=='transfer-vacancy':
+            finish=f"select public.tm_public_transfer('{k['rotation']}','{k['out']}','{k['other']}')"
+            queued=f"select public.tm_public_transfer('{k['rotation']}','{k['source']}','{k['other']}')"
         else:
             queued=f"select public.tm_public_transfer('{k['rotation']}','{k['out']}','{k['other']}')"
     else:

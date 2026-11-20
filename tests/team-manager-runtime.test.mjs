@@ -10,6 +10,7 @@ const app=fs.readFileSync(path.join(root,"teams.mjs"),"utf8")
   .replace(/^import [^\n]*;\n/gm,"");
 const optionsCode=fs.readFileSync(path.join(root,"rotation-options.mjs"),"utf8")
   .replace("export function rotationOptions","function rotationOptions");
+const profileCode=fs.readFileSync(path.join(root,"profile-options.mjs"),"utf8").replace(/^export /gm,"");
 
 async function boot({initialSnapshot,organizer=false,organizerRoster=[],
   lineupByGame={},organizerAppearances={},transferHistory=[],
@@ -67,6 +68,12 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
       calls.push({name,args});
       if(rpcOverride){const result=await rpcOverride(name,args);if(result!==undefined)return result;}
       if(name==="tm_public_snapshot")return {data:snapshot,error:null};
+      if(name==="tm_public_transfer_options")return {data:snapshot.eligibleTransfers || [],error:null};
+      if(name==="tm_org_save_profile"){
+        const player=organizerRoster.find(p=>p.email===args.p_email);
+        if(player)Object.assign(player,{skill:args.p_skill,gender:args.p_gender,positions:args.p_positions});
+        return {data:"profile",error:null};
+      }
       if(name==="tm_org_set_attendance"){
         const player=organizerRoster.find(p=>p.id===args?.p_session_player_id);
         if(player)player.attendance=args.p_attendance;
@@ -89,7 +96,7 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
     "const generateBalancedTeams=()=>({teams:[],qualityScore:0});\n"+
     "const scoreBalancedDraft=()=>0;\n"+
     "const suggestSharedRolePairs=()=>[];\n"+
-    optionsCode+"\n"+app+"\nwindow.__tm={refresh};");
+    profileCode+"\n"+optionsCode+"\n"+app+"\nwindow.__tm={refresh};");
   await new Promise(resolve=>setTimeout(resolve,40));
   return {
     dom,calls,errs,
@@ -110,6 +117,7 @@ test("public: inactive page is safe and organizer controls stay hidden",async()=
     assert.match(t.dom.window.document.querySelector("#tm-public-content").textContent,
       /No active volleyball session/i);
     assert(t.dom.window.document.querySelector("#tm-organizer").hidden);
+    assert.equal(t.dom.window.document.querySelector("#tm-organizer-link").textContent,"Organizer Login");
     assert(t.calls.some(c=>c.name==="tm_public_snapshot"));
     assert(!t.calls.some(c=>c.name==="tm_org_roster"),
       "Public sessions must never request private roster RPC");
@@ -148,6 +156,10 @@ test("organizer: authorized user sees event picker and private management shell"
     assert.deepEqual(t.errs,[]);
     const doc=t.dom.window.document;
     assert(!doc.querySelector("#tm-organizer").hidden);
+    const link=doc.querySelector("#tm-organizer-link");
+    assert.equal(link.textContent,"Organizer Dashboard");
+    assert(link.classList.contains("is-signed-in"));
+    assert.equal(link.getAttribute("href"),"../?dashboard=1");
     assert.match(doc.querySelector("#tm-source-event").textContent,/Example session/);
     assert(doc.querySelector("#tm-org-empty")&&!doc.querySelector("#tm-org-empty").hidden);
   }finally{t.close();}
@@ -226,17 +238,22 @@ test("six-team public view only offers resting-team substitutes on the same cour
   }finally{t.close();}
 });
 
-test("five-team page exposes rotation-long public transfer and not temporary subs",async()=>{
+test("five-team page offers only eligible transfers and hides them after the vacancy is filled",async()=>{
   const teams=makeTeams(5);
-  const t=await boot({initialSnapshot:{
+  const base={
     active:true,session_id:"session",format:5,revision:2,
     rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams,
     games:[{id:"game1",round:1,court:1,status:"ready",
       team_a_id:"team1",team_b_id:"team2",winner_team_id:null}]
-  }});
+  };
+  const t=await boot({initialSnapshot:base});
   try{
     const doc=t.dom.window.document;
-    assert(doc.querySelector("#tm-transfer-player"));
+    assert.equal(doc.querySelector("#tm-transfer-player"),null);
+    t.setSnapshot({...base,revision:3,eligibleTransfers:[{player_id:"person1",target_team_id:"team2"}]});
+    await t.refresh();
+    assert.deepEqual([...doc.querySelector("#tm-transfer-player").options].map(o=>o.value),["","person1"]);
+    assert.deepEqual([...doc.querySelector("#tm-transfer-target").options].map(o=>o.value),["","team2"]);
     assert.equal(doc.querySelector('[data-sub-player="game1"]'),null);
     doc.querySelector("#tm-transfer-player").value="person1";
     doc.querySelector("#tm-transfer-target").value="team2";
@@ -244,6 +261,9 @@ test("five-team page exposes rotation-long public transfer and not temporary sub
     await pause();
     assert(t.calls.some(c=>c.name==="tm_public_transfer"&&
       c.args?.p_rotation_id==="rot"&&c.args?.p_session_player_id==="person1"));
+    t.setSnapshot({...base,revision:4});
+    await t.refresh();
+    assert.equal(doc.querySelector(".tm-transfer"),null);
   }finally{t.close();}
 });
 
@@ -599,6 +619,51 @@ const privateRosterFixture=[{id:"private-player",profile_id:"private-profile",
 const activePrivateSession={active:true,session_id:"private-session",revision:1,
   format:6,rotation_id:null,rotation_status:null,teams:[],games:[]};
 
+test("profile dropdowns save skill, one gender, up to two positions or Flex alone",async()=>{
+  const t=await boot({organizer:true,initialSnapshot:activePrivateSession,
+    organizerRoster:[{...privateRosterFixture[0],gender:"F",positions:["Outside hitter"]}]});
+  try {
+    const doc=t.dom.window.document;
+    const select=selector=>doc.querySelector("#tm-roster "+selector);
+    const box=role=>select('[data-position][value="'+role+'"]');
+    const checked=()=>[...doc.querySelectorAll("[data-position]:checked")].map(b=>b.value);
+    const save=async()=>{select("[data-save-profile]").click();await pause();};
+    assert.deepEqual([...select("[data-skill]").options].map(o=>o.value),["","1","2","3","4","5","6","7","8","9","10"]);
+    assert.deepEqual([...select("[data-gender]").options].map(o=>o.value),["","male","female"]);
+    assert(select("[data-gender]").options[0].disabled);
+    assert(select("[data-skill]").options[0].disabled);
+    assert.equal(select("[data-gender]").value,"female");
+    assert.deepEqual(checked(),["outside"]);
+    select("[data-skill]").value="10";
+    select("[data-gender]").value="male";
+    select("[data-gender]").dispatchEvent(new t.dom.window.Event("change",{bubbles:true}));
+    box("setter").click();
+    assert(box("right side").disabled);
+    box("right side").click();
+    assert.deepEqual(checked(),["outside","setter"]);
+    const openPicker=select("[data-positions]");
+    openPicker.open=true;
+    t.setSnapshot({...activePrivateSession,revision:2});
+    await t.refresh();
+    assert.equal(select("[data-positions]"),openPicker);
+    assert(openPicker.open);
+    assert.deepEqual(checked(),["outside","setter"]);
+    await save();
+    assert.equal(select("[data-skill]").value,"10");
+    assert.equal(select("[data-gender]").value,"male");
+    assert.deepEqual(checked(),["outside","setter"]);
+    box("flex").click();
+    assert.deepEqual(checked(),["flex"]);
+    await save();
+    assert.equal(select("[data-position-summary]").textContent,"Flex");
+    box("right side").click();
+    assert.deepEqual(checked(),["right side"]);
+    box("right side").click();
+    await save();
+    assert.deepEqual(checked(),[]);
+  } finally {t.close();}
+});
+
 test("logout clears private roster, event choices and cached statistics immediately",async()=>{
   const t=await boot({organizer:true,initialSnapshot:activePrivateSession,
     organizerRoster:privateRosterFixture});
@@ -607,6 +672,8 @@ test("logout clears private roster, event choices and cached statistics immediat
     assert.match(doc.querySelector("#tm-roster").innerHTML,/Private Player/);
     doc.querySelector("#tm-final-stats-body").textContent="Sensitive stats";
     t.signOut();
+    assert.equal(doc.querySelector("#tm-organizer-link").textContent,"Organizer Login");
+    assert(!doc.querySelector("#tm-organizer-link").classList.contains("is-signed-in"));
     assert(doc.querySelector("#tm-organizer").hidden);
     assert(!doc.querySelector("#tm-organizer").innerHTML.includes("Private Player"));
     assert.equal(doc.querySelector("#tm-final-stats-body").textContent,"");

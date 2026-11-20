@@ -12,7 +12,10 @@ export PGDATABASE="$release_db"
 sed '/^create role /d' db/tests/fixture.sql | psql -X -v ON_ERROR_STOP=1 -1 >/dev/null
 fingerprint="select md5(jsonb_build_object('events',(select jsonb_agg(to_jsonb(t) order by id) from public.events t),'registrations',(select jsonb_agg(to_jsonb(t) order by id) from public.registrations t),'organizers',(select jsonb_agg(to_jsonb(t) order by user_id) from public.organizers t))::text)"
 before="$(psql -X -At -c "$fingerprint")"
-psql -X -v ON_ERROR_STOP=1 -1 -f db/release/migrations/*_event_day_manager.sql >/dev/null
+for migration in db/release/migrations/*.sql; do
+  psql -X -v ON_ERROR_STOP=1 -1 -f "$migration" >/dev/null
+done
+[[ "$(psql -X -At -c "select has_function_privilege('anon','public.tm_public_transfer_options(uuid)','execute')")" == t ]]
 [[ "$(psql -X -At -c "$fingerprint")" == "$before" ]]
 # A duplicate/partial install must be stopped by preflight, not overwritten.
 if psql -X -v ON_ERROR_STOP=1 -1 -f db/release/preflight.sql >/dev/null 2>&1; then

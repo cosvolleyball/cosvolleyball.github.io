@@ -127,6 +127,7 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,
         if(name==="tm_public_snapshot"){
           return {data:structuredClone(s),error:null};
         }
+        if(name==="tm_public_transfer_options")return {data:s.transferOptions || [],error:null};
         if(name==="tm_org_roster"){
           return {data:structuredClone(window.__teamsRoster),error:null};
         }
@@ -155,7 +156,7 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,
           if(p)p.attendance=args.p_attendance;
           s.revision++;
         }
-        if(name==="tm_public_transfer")s.revision++;
+        if(name==="tm_public_transfer"){s.transferOptions=[];s.revision++;}
         if(name==="tm_public_record_sub")s.revision++;
         if(name==="tm_public_cancel_sub")s.revision++;
         changedCallback?.({payload:{revision:s.revision,active:true}});
@@ -259,7 +260,7 @@ try {
     console.log("PASS "+engine+" mobile seven-player 6v6 regular in-game teammate rotation");
   }finally{await seven.context.close();}
 
-  const five=await openPage({snapshot:sample(5),width:390,height:844});
+  const five=await openPage({snapshot:{...sample(5),transferOptions:[{player_id:"p1",target_team_id:"t2"}]},width:390,height:844});
   try{
     const page=five.page;
     await page.locator("#tm-transfer-player").waitFor();
@@ -275,6 +276,7 @@ try {
     const calls=await page.evaluate(()=>window.__teamsCalls);
     assert(calls.some(c=>c.name==="tm_public_transfer"&&
       c.args.p_session_player_id==="p1"&&c.args.p_to_team_id==="t2"));
+    await page.locator("#tm-transfer-player").waitFor({state:"detached"});
     assert.deepEqual(five.errors,[]);
     console.log("PASS "+engine+" mobile five-team transfer without temporary subs");
   }finally{await five.context.close();}
@@ -319,10 +321,22 @@ try {
   try{
     const page=organizerPhone.page;
     await page.locator('.tm-attendance-table [data-mark-no-show="registered"]').waitFor();
+    const nav=page.locator('#tm-organizer-link');
+    assert.equal(await nav.innerText(),"Organizer Dashboard");
+    const signedInColor=await nav.evaluate(el=>getComputedStyle(el).backgroundColor);
     await verifyNoPageOverflow(page,"390px organizer attendance roster");
     const layout=await page.locator(".tm-attendance-table tbody").evaluate(el=>
       getComputedStyle(el).display);
     assert.equal(layout,"grid","Mobile attendance should use stacked cards");
+    const picker=page.locator('[data-player-row="registered"] [data-positions]');
+    await picker.locator('summary').click();
+    await picker.getByLabel("Outside",{exact:true}).check();
+    await picker.getByLabel("Setter",{exact:true}).check();
+    assert(await picker.getByLabel("Libero",{exact:true}).isDisabled());
+    await picker.getByLabel("Flex (all positions)",{exact:true}).check();
+    assert.equal(await picker.locator("input:checked").count(),1);
+    await verifyNoPageOverflow(page,"390px organizer position picker");
+    await picker.locator('summary').click();
     const action=await page.locator('[data-mark-no-show="registered"]').boundingBox();
     assert(action&&action.x>=0&&action.x+action.width<=392,
       "No-show action should fit within the mobile viewport without sideways scrolling");
@@ -334,6 +348,8 @@ try {
     await verifyNoPageOverflow(page,"390px organizer after attendance correction");
     assert.deepEqual(organizerPhone.errors,[]);
     await page.evaluate(()=>window.__teamsSignOut());
+    assert.equal(await nav.innerText(),"Organizer Login");
+    await page.waitForFunction(color => getComputedStyle(document.querySelector("#tm-organizer-link")).backgroundColor !== color, signedInColor);
     assert(await page.locator("#tm-organizer").isHidden());
     assert.equal(await page.locator("#tm-roster").textContent(),"");
     console.log("PASS mobile organizer attendance and immediate logout privacy cleanup");

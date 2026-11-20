@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.119.0";
 import { generateBalancedTeams, scoreBalancedDraft, suggestSharedRolePairs } from "./balancing.mjs";
 import { rotationOptions } from "./rotation-options.mjs";
+import { normalizedGender, normalizedPosition, positionChoices } from "./profile-options.mjs";
 
 // Public publishable browser credentials, matching the main site's client.
 // Never embed service_role credentials or privileged data in this module.
@@ -193,22 +194,26 @@ function gameControls(g, teams, session) {
 
 function rotationTransferControls(teams, session) {
   if (teams.length !== 5 || session.rotation_status !== "published") return "";
-  const allPlayers = teams.flatMap(team=>(team.players||[])
+  const options = session.transferOptions || [];
+  if (!options.length) return "";
+  const donorIds = new Set(options.map(o => o.player_id));
+  const targetIds = new Set(options.map(o => o.target_team_id));
+  const availablePlayers = teams.flatMap(team=>(team.players||[]).filter(p=>donorIds.has(p.id))
     .map(p=>({id:p.id,name:p.name,from:team.label})));
   return `<section class="tm-panel tm-transfer" aria-labelledby="tm-transfer-title">
     <h3 id="tm-transfer-title">Five-team player transfers</h3>
-    <p>Move a player between games only. This assignment lasts until the
-      next organizer-published reshuffle. No mid-game interruptions or temporary subs.</p>
+    <p>A team needs another player for this format. An idle team with an extra player
+      can lend them until the next reshuffle.</p>
     <div class="tm-form tm-inline">
       <label>Player<select id="tm-transfer-player">
         <option value="">Choose player…</option>
-        ${allPlayers.map(p=>`<option value="${escapeHtml(p.id)}">
+        ${availablePlayers.map(p=>`<option value="${escapeHtml(p.id)}">
           ${escapeHtml(p.name)} (${escapeHtml(p.from)})
         </option>`).join("")}
       </select></label>
       <label>New team<select id="tm-transfer-target">
         <option value="">Choose team…</option>
-        ${teams.map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.label)}</option>`).join("")}
+        ${teams.filter(t=>targetIds.has(t.id)).map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.label)}</option>`).join("")}
       </select></label>
       <button type="button" class="tm-button tm-secondary"
         data-tm-game-action="transfer"
@@ -334,6 +339,46 @@ function formatStats(stats) {
       <td>${Number(p.wins)||0}</td>
     </tr>`).join("")}</tbody></table></div>`;
 }
+const titleCase = word => word.charAt(0).toUpperCase() + word.slice(1);
+const skillRatings = Array.from({length:10}, (_, i) => String(i + 1));
+
+function profileSelect(choices, current, placeholder) {
+  return `<option value="" disabled hidden${choices.includes(current) ? "" : " selected"}>${escapeHtml(placeholder)}</option>` + choices.map(value =>
+    `<option value="${value}"${current === value ? " selected" : ""}>${titleCase(value)}</option>`).join("");
+}
+
+function positionPicker(player) {
+  const saved = player.positions || [];
+  const selected = saved.map(normalizedPosition);
+  const isFlex = selected.includes("flex");
+  const shown = isFlex ? ["flex"] : positionChoices.filter(p=>selected.includes(p));
+  const previous = saved.filter(p => !positionChoices.includes(normalizedPosition(p)));
+  return `<details class="tm-position-picker" data-positions>
+    <summary><span class="tm-sr-only">Preferred positions for ${escapeHtml(player.name)}, </span><span data-position-summary>${escapeHtml([...shown.map(titleCase), ...previous].join(", ") || "Choose positions")}</span></summary>
+    <fieldset><legend>Choose up to two positions</legend>
+      ${positionChoices.map(value => `<label><input type="checkbox" data-position value="${value}"${shown.includes(value) ? " checked" : ""}${shown.length === 2 && value !== "flex" && !shown.includes(value) ? " disabled" : ""}>${value === "flex" ? "Flex (all positions)" : titleCase(value)}</label>`).join("")}
+    </fieldset>
+    ${previous.length ? `<small>Previous entries: ${escapeHtml(previous.join(", "))}</small><button type="button" data-clear-positions>Clear positions</button>` : ""}
+  </details>`;
+}
+
+function updatePositionPicker(picker, changed) {
+  picker.dataset.edited = "true";
+  const boxes = [...picker.querySelectorAll("[data-position]")];
+  if (!changed || changed.checked) {
+    for (const box of boxes) {
+      if (!changed || (box !== changed && (changed.value === "flex" || box.value === "flex"))) box.checked = false;
+    }
+  }
+  const selected = boxes.filter(box => box.checked).map(box => box.value);
+  for (const box of boxes) box.disabled = selected.length >= 2 && !box.checked && box.value !== "flex";
+  picker.querySelector("[data-position-summary]").textContent = selected.map(titleCase).join(", ") || "Choose positions";
+  picker.querySelector("small")?.remove();
+  picker.querySelector("[data-clear-positions]")?.remove();
+}
+
+// Keep unrelated profile edits and keyboard focus when another player or court updates.
+const savedRosterMarkup = new WeakMap();
 function renderRoster() {
   const host = $("tm-roster");
   const available=state.roster.filter(p=>["present","waiting"].includes(p.attendance)).length;
@@ -345,7 +390,8 @@ function renderRoster() {
     host.innerHTML = '<p class="tm-muted">No registered players were imported. Add walk-ins below.</p>';
     return;
   }
-  host.innerHTML = `<table class="tm-attendance-table">
+  const template = document.createElement("template");
+  template.innerHTML = `<table class="tm-attendance-table">
     <thead><tr><th>Player</th><th>Event list</th><th>Included for teams?</th>
       <th>Quick action</th><th>Skill (1–10)</th>
       <th>Gender</th><th>Preferred positions (max 2)</th><th>Save profile</th></tr></thead>
@@ -362,16 +408,33 @@ function renderRoster() {
         `<button type="button" class="tm-button tm-secondary tm-roster-save"
           data-include-player="${escapeHtml(p.id)}">Include</button>`}</td>
       <td data-label="Skill (1–10)"><label class="tm-sr-only" for="skill-${escapeHtml(p.id)}">Skill for ${escapeHtml(p.name)}</label>
-        <input id="skill-${escapeHtml(p.id)}" class="tm-skill" data-skill type="number"
-        min="1" max="10" step="1" value="${p.skill ?? ""}"></td>
+        <select id="skill-${escapeHtml(p.id)}" class="tm-skill" data-skill>${profileSelect(skillRatings, String(p.skill), "Unrated")}</select></td>
       <td data-label="Gender"><label class="tm-sr-only" for="gender-${escapeHtml(p.id)}">Gender for ${escapeHtml(p.name)}</label>
-        <input id="gender-${escapeHtml(p.id)}" data-gender type="text" maxlength="40" value="${escapeHtml(p.gender || "")}"></td>
-      <td data-label="Positions"><label class="tm-sr-only" for="positions-${escapeHtml(p.id)}">Positions for ${escapeHtml(p.name)}</label>
-        <input id="positions-${escapeHtml(p.id)}" class="tm-position" data-positions type="text"
-        placeholder="Setter, outside" value="${escapeHtml((p.positions||[]).join(", "))}"></td>
+        <select id="gender-${escapeHtml(p.id)}" data-gender>${profileSelect(["male","female"], normalizedGender(p.gender),
+          p.gender ? "Previous entry: " + p.gender : "Choose gender")}</select></td>
+      <td data-label="Preferred positions">${positionPicker(p)}</td>
       <td data-label="Save profile"><button type="button" class="tm-button tm-secondary tm-roster-save"
         data-save-profile="${escapeHtml(p.id)}">Save</button></td>
     </tr>`).join("")}</tbody></table>`;
+  const table = template.content.firstElementChild;
+  const nextRows = [...table.tBodies[0].rows];
+  const existingBody = host.querySelector("tbody");
+  if (!existingBody) {
+    for (const row of nextRows) savedRosterMarkup.set(row, row.innerHTML);
+    host.replaceChildren(table);
+    return;
+  }
+  const previous = new Map([...existingBody.rows].map(row => [row.dataset.playerRow, row]));
+  nextRows.forEach((next, index) => {
+    const old = previous.get(next.dataset.playerRow);
+    const markup = next.innerHTML;
+    const row = savedRosterMarkup.get(old) === markup ? old : next;
+    if (old && old !== row) old.replaceWith(row);
+    if (existingBody.rows[index] !== row) existingBody.insertBefore(row, existingBody.rows[index] || null);
+    savedRosterMarkup.set(row, markup);
+    previous.delete(next.dataset.playerRow);
+  });
+  for (const row of previous.values()) row.remove();
 }
 
 function currentDraftTeams() { return state.draft?.teams || []; }
@@ -730,6 +793,13 @@ function renderOrganizer() {
   renderAppearanceCorrection();
   renderTransferCorrection();
 }
+function showOrganizerAccess(signedIn) {
+  const link = $("tm-organizer-link");
+  link.textContent = signedIn ? "Organizer Dashboard" : "Organizer Login";
+  link.classList.toggle("is-signed-in", signedIn);
+  $("tm-organizer").hidden = !signedIn;
+}
+
 // Forget private data immediately on logout, lost access or page caching.
 // The epoch also invalidates requests that were already in flight.
 function clearOrganizer(retryAfterNetworkError = false) {
@@ -743,7 +813,7 @@ function clearOrganizer(retryAfterNetworkError = false) {
   for(const key of ["draft","savedDraftId","lastPrivateRevision",
     "lastPrivateSessionId","adjustRenderKey","appearanceRenderKey","choicesKey"])
     state[key]=null;
-  $("tm-organizer").hidden=true;
+  showOrganizerAccess(false);
   $("tm-final-stats").hidden=true;
   for(const id of ["tm-roster","tm-roster-count","tm-draft","tm-stats",
     "tm-final-stats-body"])$(id).replaceChildren();
@@ -811,6 +881,9 @@ async function refresh(forcePrivate = false) {
     if (snapshot?.active && snapshot.rotation_status === "published") {
       const ready = (snapshot.games||[]).filter(g=>g.status==="ready");
       const playing = (snapshot.games||[]).filter(g=>g.status==="playing");
+      if (snapshot.teams?.length === 5) {
+        snapshot.transferOptions = await rpc("tm_public_transfer_options", {p_rotation_id:snapshot.rotation_id});
+      }
       if(snapshot.teams?.length===6){
         const rows = await Promise.all(ready.map(async g=>({
           id:g.id,subs:await rpc("tm_public_game_subs",{p_game_id:g.id})
@@ -889,7 +962,7 @@ async function checkOrganizer() {
     state.isOrganizer=true;
     state.organizerUserId=data.user.id;
     state.events=events||[];
-    $("tm-organizer").hidden=false;
+    showOrganizerAccess(true);
     renderEventPicker();
     if(state.snapshot)renderPublic();
   } catch(error) {
@@ -991,6 +1064,8 @@ $("tm-public-content").addEventListener("click",e=>{
       const player=$("tm-transfer-player")?.value;
       const toTeam=$("tm-transfer-target")?.value;
       if(!player||!toTeam)throw new Error("Choose a player and their new team.");
+      if (!state.snapshot.transferOptions?.some(o=>o.player_id===player && o.target_team_id===toTeam))
+        throw new Error("This transfer is no longer needed.");
       if(!window.confirm("Transfer this player to "+teamName(teams,toTeam)+
           " until the next reshuffle? Teams must agree and neither can be playing."))return;
       await rpc("tm_public_transfer",{
@@ -1100,11 +1175,14 @@ async function updateAttendance(playerId,status) {
   await refresh(true);
 }
 $("tm-roster").addEventListener("change",e=>{
+  if (e.target.matches("[data-position]")) updatePositionPicker(e.target.closest("[data-positions]"), e.target);
+  if (e.target.matches("[data-gender]")) e.target.dataset.edited = "true";
   const id=e.target.dataset.attendance;
   if(!id)return;
   void action(()=>updateAttendance(id,e.target.value));
 });
 $("tm-roster").addEventListener("click",e=>{
+  if (e.target.closest("[data-clear-positions]")) updatePositionPicker(e.target.closest("[data-positions]"), null);
   const absent=e.target.closest("[data-mark-no-show]");
   const included=e.target.closest("[data-include-player]");
   if(absent)void action(()=>updateAttendance(absent.dataset.markNoShow,"absent"));
@@ -1118,13 +1196,14 @@ $("tm-roster").addEventListener("click",e=>{
     const player=state.roster.find(p=>p.id===id);
     if(!player)throw new Error("Player not found.");
     const raw=row.querySelector("[data-skill]").value.trim();
-    const positions=row.querySelector("[data-positions]").value.split(",")
-      .map(x=>x.trim()).filter(Boolean);
-    if(positions.length>2)throw new Error("Maximum of two preferred positions.");
+    const gender=row.querySelector("[data-gender]");
+    const picker=row.querySelector("[data-positions]");
+    // Keep an untouched legacy entry when another field is edited.
+    const positions=picker.dataset.edited ? [...picker.querySelectorAll(":checked")].map(box=>box.value) : player.positions || [];
     await rpc("tm_org_save_profile",{
       p_email:player.email,p_name:player.name,
       p_skill:raw===""?null:Number(raw),
-      p_gender:row.querySelector("[data-gender]").value.trim()||null,
+      p_gender:gender.dataset.edited ? gender.value || null : player.gender || null,
       p_positions:positions
     });
     state.draft=null;state.savedDraftId=null;state.undoStack=[];

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {generateBalancedTeams, scoreBalancedDraft, seededRandom, suggestSharedRolePairs} from "../website/teams/balancing.mjs";
+import {coveredPositions, courtPositions} from "../website/teams/profile-options.mjs";
 
 function players(count, make = () => ({})) {
   return Array.from({length: count}, (_, i) => ({
@@ -178,4 +179,15 @@ test("6v6 extra-player rosters can recommend a middle/libero role-sharing pair",
   assert.deepEqual(pairs,[{seed:1,playerIds:[roster[0].id,roster[1].id]}]);
   assert.deepEqual(suggestSharedRolePairs(roster,split,4),pairs);
   assert.deepEqual(suggestSharedRolePairs(roster,split.slice(1),6),[]);
+});
+
+test("Flex covers every court position and a role-sharing pair needs two people",()=>{
+  const roster=players(7,i=>({positions:i===0?["Flex"]:["setter"]}));
+  const split=[{seed:1,playerIds:roster.map(p=>p.id)}];
+  assert.deepEqual(coveredPositions(roster[0]),courtPositions);
+  assert.deepEqual(suggestSharedRolePairs(roster,split,6),[]);
+  roster[1].positions=["middle"];
+  assert.deepEqual(suggestSharedRolePairs(roster,split,6)[0].playerIds,[roster[1].id,roster[0].id]);
+  roster[2].positions=["libero"];
+  assert.deepEqual(suggestSharedRolePairs(roster,split,6)[0].playerIds,[roster[1].id,roster[2].id]);
 });

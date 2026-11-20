@@ -122,8 +122,24 @@
 }
 .tm-roster th,.tm-stats-table th { font-size: .85rem; white-space: nowrap; }
 .tm-roster td:first-child { font-weight: 700; }
-.tm-roster .tm-skill { width: 76px; }
-.tm-roster .tm-position { min-width: 130px; }
+.tm-roster .tm-skill { width: 6rem; }
+.tm-position-picker { min-width: 9rem; }
+.tm-position-picker summary {
+  padding: .6rem .7rem;
+  min-height: 44px;
+  border: 1px solid #9fb8c6;
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+}
+.tm-position-picker summary:focus-visible { outline: 3px solid var(--cyan); }
+.tm-position-picker[open] summary { background: #e8f4f7; }
+.tm-position-picker fieldset { margin: .4rem 0 0; padding: .4rem .65rem; border: 1px solid var(--line); border-radius: 8px; }
+.tm-position-picker legend { font-size: .85rem; font-weight: 700; }
+.tm-position-picker label { display: flex; align-items: center; gap: .55rem; min-height: 44px; cursor: pointer; }
+.tm-roster .tm-position-picker input[type=checkbox] { width: 1.15rem; height: 1.15rem; margin: 0; padding: 0; accent-color: var(--teal); }
+.tm-position-picker label:has(:disabled) { color: var(--muted); cursor: default; }
 .tm-roster .tm-roster-save { padding: .4rem .7rem; }
 .tm-draft { margin-top: 1rem; }
 .tm-draft .tm-team { border-color: #a8d2da; }

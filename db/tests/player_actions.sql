@@ -176,7 +176,28 @@ begin
   select id into v_game from public.tm_games
     where rotation_id=v_rotation and round_number=1 and court=1;
 
+  -- 6/5/5/5/5 in a 5v5 rotation has an extra player and no vacancy.
+  if exists (select 1 from public.tm_public_transfer_options(v_rotation)) then
+    raise exception 'Full teams offered a transfer';
+  end if;
+  begin
+    perform public.tm_public_transfer(v_rotation,v_sub,v_team2);
+    raise exception 'A full team accepted a transfer';
+  exception when sqlstate '22023' then null;
+  end;
+  select session_player_id into v_target_bench from public.tm_memberships
+    where rotation_id=v_rotation and team_id=v_team2 limit 1;
+  perform public.tm_org_set_attendance(v_target_bench,'break');
+  if (select count(*) from public.tm_public_transfer_options(v_rotation)) <> 6
+    or exists (select 1 from public.tm_public_transfer_options(v_rotation) opt
+      where opt.target_team_id <> v_team2 or not exists (
+        select 1 from public.tm_memberships m where m.team_id=v_team1 and m.session_player_id=opt.player_id)) then
+    raise exception 'Eligible choices should be six donors for the one short team';
+  end if;
   perform public.tm_public_transfer(v_rotation,v_sub,v_team2);
+  if exists (select 1 from public.tm_public_transfer_options(v_rotation)) then
+    raise exception 'Filling the vacancy must hide transfers';
+  end if;
   if (select team_id from public.tm_memberships where rotation_id=v_rotation
       and session_player_id=v_sub)<>v_team2
       or (select count(*) from public.tm_transfers
@@ -198,6 +219,7 @@ begin
   if jsonb_array_length(public.tm_org_transfers(v_rotation))<>1 then
     raise exception 'Transferred player missing from private organizer history';
   end if;
+  perform public.tm_org_set_attendance(v_target_bench,'present');
   perform public.tm_org_correct_transfer(v_rotation,v_sub,v_team1);
   if (select team_id from public.tm_memberships
     where rotation_id=v_rotation and session_player_id=v_sub)<>v_team1 then

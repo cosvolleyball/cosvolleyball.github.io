@@ -48,6 +48,9 @@ begin
   select revision into v_revision from public.tm_sessions
     where id=v_session;
   v_rotation:=public.tm_org_publish_draft(v_session,v_revision);
+  perform public.tm_org_set_attendance((
+    select m.session_player_id from public.tm_memberships m where m.team_id=t.id limit 1
+  ),'break') from public.tm_teams t where t.rotation_id=v_rotation and t.seed in (2,3);
   insert into public.tm_test_transfer_keys(
     rotation_id,session_id,session_player_id,team_a_id,team_b_id)
   select v_rotation,v_session,m.session_player_id,

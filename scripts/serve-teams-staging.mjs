@@ -16,7 +16,7 @@ export async function serveTeamsPreview({api, publicKey, lan}) {
   const allowed=new Map([
     ['/styles.css','styles.css'],['/favicon.svg','favicon.svg'],
     ['/favicon-192.png','favicon-192.png'],
-    ...['index.html','teams.mjs','teams.css','scheduling.mjs','balancing.mjs','rotation-options.mjs']
+    ...['index.html','teams.mjs','teams.css','scheduling.mjs','balancing.mjs','rotation-options.mjs','profile-options.mjs']
       .map(name=>['/teams/'+name,'teams/'+name])
   ]);
   const types={'.html':'text/html','.css':'text/css','.mjs':'text/javascript','.svg':'image/svg+xml','.png':'image/png'};
