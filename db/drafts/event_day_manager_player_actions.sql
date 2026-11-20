@@ -1,5 +1,4 @@
--- EVENT DAY MANAGER PART 4: PUBLIC SUBS AND FIVE-TEAM TRANSFERS
--- REVIEW DRAFT ONLY. Applied only to disposable PostgreSQL test service.
+-- Same-court substitutes, between-game transfers and organizer corrections.
 --
 -- The six-team format permits game-specific same-court resting-team subs.
 -- Five-team rotations permit NO temporary subs; instead, roster transfers

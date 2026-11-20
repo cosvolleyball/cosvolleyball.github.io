@@ -1,9 +1,8 @@
--- LOCAL SUPABASE ONLY: minimal, synthetic stand-in for the existing
--- COS Volleyball tables. Apply AFTER 'supabase start' to its local DB.
--- Do not apply to either user's existing hosted Supabase project.
+-- Synthetic event, organizer and registration schema for the local Supabase test stack.
+-- The Supabase CLI loads this fixture while starting the practice database.
 --
 -- In local Supabase, auth.users/auth.uid(), anon and authenticated roles
--- already exist. Unlike fixture.sql, we do not recreate them.
+-- already exist. The fixture reuses these objects.
 create table public.organizers (
   user_id uuid primary key references auth.users(id) on delete cascade
 );

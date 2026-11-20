@@ -1,6 +1,4 @@
--- EVENT DAY MANAGER PART 7: EMERGENCY IN-GAME SIX-TEAM SUBSTITUTIONS
--- Review draft. Changes ONLY the new Teams Manager tables, not registrations.
--- Apply after parts 1-6 in disposable PostgreSQL tests.
+-- Emergency substitutions during a live six-team game.
 --
 -- An appearance means a person participated at least once. Someone injured
 -- mid-game retains that appearance, but is no longer actively on court.

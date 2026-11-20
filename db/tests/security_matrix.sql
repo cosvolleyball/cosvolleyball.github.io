@@ -1,6 +1,4 @@
--- Automated least-privilege audit for ALL Teams Manager objects.
--- Runs only against disposable PostgreSQL / local Supabase.
--- Never mutates the existing COS Volleyball tables or hosted projects.
+-- Read-only audit of grants, row security and function settings for manager objects.
 do $security_matrix$
 declare
   v_function record;

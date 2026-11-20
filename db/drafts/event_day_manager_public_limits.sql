@@ -1,5 +1,4 @@
--- EVENT DAY MANAGER PART 10: ANONYMOUS WRITE ABUSE GUARD
--- REVIEW DRAFT ONLY, apply to local Supabase or disposable CI Postgres.
+-- Shared per-session and per-game limits on anonymous player actions.
 --
 -- Deliberately conservative *shared* limits, not proof of player identity:
 -- 120 public changes / active session / rolling minute;

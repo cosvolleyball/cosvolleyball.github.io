@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
-      - name: Check out development branch
+      - name: Check out the repository
         uses: actions/checkout@v4
 
       - name: Install Node for browser test runner

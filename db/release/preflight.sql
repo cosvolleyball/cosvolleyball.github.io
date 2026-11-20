@@ -1,5 +1,4 @@
--- Read-only compatibility gate. Runs before any manager DDL in the release.
--- Re-run immediately before release; prior review is not a permanent guarantee.
+-- Read-only compatibility checks for the initial manager installation.
 do $preflight$
 declare expected record; actual text;
 begin

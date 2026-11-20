@@ -1,6 +1,4 @@
--- EVENT DAY MANAGER PART 3: PUBLIC MATCH OPERATIONS (REVIEW DRAFT)
--- Apply ONLY in disposable PostgreSQL 17 CI database after parts 1 and 2.
--- Not deployed or applied to the hosted Supabase project.
+-- Game readiness, starts, winner reports and organizer corrections.
 --
 -- Anonymous callers may start READY games and submit their first valid winner.
 -- Every operation locks its session row, validating concurrent actions atomically.

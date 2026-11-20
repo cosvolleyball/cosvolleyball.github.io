@@ -1,8 +1,5 @@
--- EVENT DAY MANAGER — REVIEW DRAFT ONLY
--- This SQL has NOT been executed against the production Supabase project.
--- Apply with a reviewed, timestamped migration after local/staging tests.
--- Deliberately does not ALTER existing events, registrations, organizers,
--- payment, audit, ban/restriction or email infrastructure.
+-- Session, roster and profile tables and functions for the Event Day Teams Manager.
+-- Source events, registrations, payments and notifications remain in the existing site schema.
 --
 -- Privacy model:
 --   * New base tables have RLS enabled, and no anon/authenticated table grants.

@@ -1,5 +1,4 @@
--- EVENT DAY MANAGER PART 6: LATE ARRIVALS / PERMANENT ROSTER REPLACEMENT
--- REVIEW DRAFT ONLY; tested in disposable PostgreSQL, not production.
+-- Late arrivals and between-game roster replacements.
 -- Organizer may fill an unoccupied rotation slot OR replace an unavailable
 -- player between games without changing the original registration system.
 create function public.tm_org_adjust_roster(

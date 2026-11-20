@@ -1,4 +1,4 @@
--- Explicitly approved recovery only, after the incident is understood.
+-- Restore the manager API grants following incident recovery.
 -- Restore only the reviewed public/organizer RPC boundary, never table grants.
 do $restore$
 declare fn record;

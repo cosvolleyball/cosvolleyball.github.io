@@ -1,4 +1,4 @@
--- Approved incident response only. Apply as one transaction with psql -1.
+-- Suspend the manager API during incident response in one transaction.
 -- Retains all profiles, histories and source registration/payment records.
 -- Apply BEFORE reverting frontend navigation. No DROP or source-table writes.
 do $suspend$

@@ -1,10 +1,8 @@
--- GENERATED RELEASE CANDIDATE: not deployed; explicit release approval required.
--- Apply atomically; do not edit after this migration is deployed.
+-- Event Day Teams Manager initial migration. Apply in a single transaction.
 set local lock_timeout = '5s';
 
 -- Source: db/release/preflight.sql
--- Read-only compatibility gate. Runs before any manager DDL in the release.
--- Re-run immediately before release; prior review is not a permanent guarantee.
+-- Read-only compatibility checks for the initial manager installation.
 do $preflight$
 declare expected record; actual text;
 begin
@@ -51,11 +49,8 @@ begin
 end $preflight$;
 
 -- Source: db/drafts/event_day_manager_foundation.sql
--- EVENT DAY MANAGER — REVIEW DRAFT ONLY
--- This SQL has NOT been executed against the production Supabase project.
--- Apply with a reviewed, timestamped migration after local/staging tests.
--- Deliberately does not ALTER existing events, registrations, organizers,
--- payment, audit, ban/restriction or email infrastructure.
+-- Session, roster and profile tables and functions for the Event Day Teams Manager.
+-- Source events, registrations, payments and notifications remain in the existing site schema.
 --
 -- Privacy model:
 --   * New base tables have RLS enabled, and no anon/authenticated table grants.
@@ -650,9 +645,7 @@ grant execute on function public.tm_public_snapshot()
 -- alter existing registration logic. See TEAM_MANAGER_DESIGN.md.
 
 -- Source: db/drafts/event_day_manager_rotations.sql
--- EVENT DAY MANAGER — REVIEW DRAFT, PART 2: ORGANIZER TEAM DRAFTS
--- Run AFTER event_day_manager_foundation.sql in a disposable test database.
--- NOT applied to the hosted Supabase project.
+-- Organizer functions for saving private team drafts and publishing rotations.
 --
 -- Organizer submits an array of {seed,playerIds:[session_player_uuid]}.
 -- Everyone physically available (present or waiting) must be assigned
@@ -996,9 +989,7 @@ grant execute on function public.tm_org_end_rotation(uuid,boolean)
   to authenticated;
 
 -- Source: db/drafts/event_day_manager_game_actions.sql
--- EVENT DAY MANAGER PART 3: PUBLIC MATCH OPERATIONS (REVIEW DRAFT)
--- Apply ONLY in disposable PostgreSQL 17 CI database after parts 1 and 2.
--- Not deployed or applied to the hosted Supabase project.
+-- Game readiness, starts, winner reports and organizer corrections.
 --
 -- Anonymous callers may start READY games and submit their first valid winner.
 -- Every operation locks its session row, validating concurrent actions atomically.
@@ -1442,8 +1433,7 @@ grant execute on function public.tm_public_game_subs(uuid)
   to anon,authenticated;
 
 -- Source: db/drafts/event_day_manager_player_actions.sql
--- EVENT DAY MANAGER PART 4: PUBLIC SUBS AND FIVE-TEAM TRANSFERS
--- REVIEW DRAFT ONLY. Applied only to disposable PostgreSQL test service.
+-- Same-court substitutes, between-game transfers and organizer corrections.
 --
 -- The six-team format permits game-specific same-court resting-team subs.
 -- Five-team rotations permit NO temporary subs; instead, roster transfers
@@ -1833,8 +1823,7 @@ grant execute on function public.tm_public_transfer(uuid,uuid,uuid)
   to anon,authenticated;
 
 -- Source: db/drafts/event_day_manager_team_history.sql
--- EVENT DAY MANAGER PART 5: ORGANIZER-ONLY TEAMMATE HISTORY
--- Review draft, exercised only on isolated PostgreSQL 17 CI database.
+-- Organizer-only teammate history within a session.
 -- Counts *actual completed-game shared appearances*, not assumed rosters.
 -- The IDs are session-player IDs. No history carries between sessions.
 create function public.tm_org_teammate_pairs(p_session_id uuid)
@@ -1874,8 +1863,7 @@ grant execute on function public.tm_org_teammate_pairs(uuid)
   to authenticated;
 
 -- Source: db/drafts/event_day_manager_roster_adjustments.sql
--- EVENT DAY MANAGER PART 6: LATE ARRIVALS / PERMANENT ROSTER REPLACEMENT
--- REVIEW DRAFT ONLY; tested in disposable PostgreSQL, not production.
+-- Late arrivals and between-game roster replacements.
 -- Organizer may fill an unoccupied rotation slot OR replace an unavailable
 -- player between games without changing the original registration system.
 create function public.tm_org_adjust_roster(
@@ -1975,9 +1963,7 @@ grant execute on function public.tm_org_adjust_roster(uuid,uuid,uuid,uuid)
   to authenticated;
 
 -- Source: db/drafts/event_day_manager_emergency.sql
--- EVENT DAY MANAGER PART 7: EMERGENCY IN-GAME SIX-TEAM SUBSTITUTIONS
--- Review draft. Changes ONLY the new Teams Manager tables, not registrations.
--- Apply after parts 1-6 in disposable PostgreSQL tests.
+-- Emergency substitutions during a live six-team game.
 --
 -- An appearance means a person participated at least once. Someone injured
 -- mid-game retains that appearance, but is no longer actively on court.
@@ -2247,8 +2233,7 @@ grant execute on function public.tm_org_game_appearances(uuid)
   to authenticated;
 
 -- Source: db/drafts/event_day_manager_intra_team_rotation.sql
--- EVENT DAY MANAGER PART 8: REGULAR WITHIN-TEAM IN-GAME ROTATION
--- REVIEW DRAFT ONLY. This does NOT borrow a player from another team.
+-- Ordinary within-team changes to the active lineup during a game.
 -- Typical cases: 7-person roster playing 6v6 (middle/libero share time);
 -- 5-person roster playing 4v4; other extra-roster combinations.
 -- A player who actually enters a game is a REGULAR participant, not a sub.
@@ -2351,9 +2336,7 @@ grant execute on function public.tm_public_rotate_teammate(uuid,uuid,uuid)
   to anon,authenticated;
 
 -- Source: db/drafts/event_day_manager_realtime.sql
--- EVENT DAY MANAGER PART 9: RESTRICTED REALTIME INVALIDATION SIGNAL
--- REVIEW DRAFT ONLY. Intended for Supabase after earlier Teams Manager SQL.
--- DO NOT apply this directly to the production Supabase database.
+-- Public revision signals for session updates using Supabase Realtime.
 --
 -- Supabase Realtime Broadcast is a notification *only*.
 -- No private row is in the publication or sent to visitors.
@@ -2413,8 +2396,7 @@ execute function tm_internal.notify_public_session_change();
 -- Do NOT publish realtime.messages; Supabase manages its broadcast channel.
 
 -- Source: db/drafts/event_day_manager_public_limits.sql
--- EVENT DAY MANAGER PART 10: ANONYMOUS WRITE ABUSE GUARD
--- REVIEW DRAFT ONLY, apply to local Supabase or disposable CI Postgres.
+-- Shared per-session and per-game limits on anonymous player actions.
 --
 -- Deliberately conservative *shared* limits, not proof of player identity:
 -- 120 public changes / active session / rolling minute;
@@ -2488,9 +2470,7 @@ before insert on public.tm_action_audit
 for each row execute function tm_internal.guard_public_action_rate();
 
 -- Source: db/tests/security_matrix.sql
--- Automated least-privilege audit for ALL Teams Manager objects.
--- Runs only against disposable PostgreSQL / local Supabase.
--- Never mutates the existing COS Volleyball tables or hosted projects.
+-- Read-only audit of grants, row security and function settings for manager objects.
 do $security_matrix$
 declare
   v_function record;

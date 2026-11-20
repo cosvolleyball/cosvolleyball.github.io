@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout feature branch
+      - name: Check out the repository
         uses: actions/checkout@v4
 
       - name: Node for local Auth and REST checks

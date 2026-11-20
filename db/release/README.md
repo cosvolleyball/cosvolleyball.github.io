@@ -1,25 +1,28 @@
-# Release the Event Day Teams Manager
+# Teams Manager database installation and recovery
 
-The manager uses the existing **Colorado Springs Pickup Volleyball** project, reference `mfumtentefcuysibknyl`, and the existing website at `cosvolleyball.github.io`. Starting a session imports the selected event's confirmed and waitlisted registrations into manager-owned tables. Registration, waitlist ordering and payment records continue to belong to the existing site.
+The website and manager use the **Colorado Springs Pickup Volleyball** Supabase project (`mfumtentefcuysibknyl`). The initial installation is recorded as migration `20261120033246_event_day_manager`. Starting a session reads a published event and its registrations. The manager writes its own rosters, games, appearances and history.
 
-[Feature pull request](https://github.com/cosvolleyball/cosvolleyball.github.io/pull/6) · [iPhone practice session](PHONE_REVIEW.md) · [Test coverage](../../TEAM_MANAGER_STAGING_PLAN.md)
+## Release files
 
-## Verify the candidate
+| File | Purpose |
+| --- | --- |
+| [Initial migration](migrations/20261120033246_event_day_manager.sql) | Complete, ordered installation, including dependency checks, grants and PostgREST schema reload |
+| [Preflight](preflight.sql) | Read-only checks for the first installation, including source columns, importable data, Realtime and conflicting manager objects |
+| [Privilege audit](../tests/security_matrix.sql) | Read-only verification of table access and database functions after installation or recovery |
+| [Suspend access](suspend_access.sql) and [restore access](restore_access.sql) | Temporarily disable or restore the manager API while retaining its data |
 
-1. Use the commit approved for release. Run `python3 db/release/build_release.py --check` to compare the packaged SQL with its reviewed source. Record the commit and the output of `sha256sum db/release/migrations/*_event_day_manager.sql` (macOS users can run `shasum -a 256`).
-2. Read the checks attached to PR #6. They exercise the existing site, organizer and player browsers, PostgreSQL contract/concurrency tests, and a release installation on a disposable local Supabase stack. The local phone rehearsal uses the same migration and a synthetic roster.
-3. The production compatibility review used catalog metadata and aggregate checks on the COS project. The required event, organizer, registration and Auth fields, Realtime function, and existing registration-to-event deletion rule matched the candidate. Recheck the [read-only preflight](preflight.sql) against the intended project immediately before installing. It checks for incompatible columns, invalid import data and prior or partial manager installations.
+## Release order
 
-## Approved rollout
+1. In a checkout of the intended release, run `python3 db/release/build_release.py --check` to verify that the initial migration matches its components. The database and local Supabase workflows test the packaged installation on a disposable database. Subsequent schema changes use new, versioned migrations.
+2. Check the target project's migration history. A fresh installation requires the existing COS event, registration, organizer, Auth and Realtime services. The preflight rejects an already-installed or partial manager. An installation already present in migration history can proceed directly to verification.
+3. Apply a pending migration through the project's migration interface as one transaction. For the initial installation, the database runs the preflight before creating objects and verifies grants before commit. A failed check or lock timeout rolls back the transaction.
+4. Verify the public `tm_public_snapshot` RPC. A fresh installation returns `{"active":false}`. The read-only privilege audit can run against an installed manager at any time.
+5. Publish the matching website through the GitHub Pages workflow. The **Teams Manager** link on the homepage opens the current session. A signed-in organizer can open the published-event picker. An event session begins when an organizer selects **Start session**.
 
-The owner explicitly approves **both** applying the database migration and merging PR #6. Carry out those operations in this order.
+## Recovery
 
-1. Confirm the project reference and the reviewed commit. Apply the single [versioned migration](migrations/20261117022704_event_day_manager.sql) as one transaction through the Supabase migration interface. With a direct connection, use `psql -X -v ON_ERROR_STOP=1 --single-transaction -f db/release/migrations/20261117022704_event_day_manager.sql` against the selected COS database and record the release in its migration history. A preflight failure, privilege failure or lock timeout stops the installation. Investigate the error before retrying.
-2. Verify the anonymous `tm_public_snapshot` RPC returns an inactive session on a fresh install. The migration checks grants on manager tables and functions and requests a PostgREST schema reload. Leave real events and registrations untouched during release verification.
-3. Merge the approved PR, wait for GitHub Pages to publish, and open **Teams Manager** from the live site's navigation. Check the inactive public view in a signed-out tab. The organizer can open the event picker using their existing website login. Start a live session only when the organizer intends to run the event.
+For a website-only problem, revert the relevant website change and verify the replacement Pages deployment. For a manager database incident, run the access-suspension script in one transaction before withdrawing the frontend. This revokes API access while preserving the manager's history and the site's event and registration records.
 
-## If the rollout needs to be reversed
+After the cause has been corrected, run the access-restoration script in one transaction. Run the privilege audit and verify the anonymous snapshot before restoring the website entry point. The first-install migration is retained as the historical record.
 
-A failed migration transaction rolls back its own changes. If the migration succeeded and the release needs to be withdrawn, apply [suspend_access.sql](suspend_access.sql) as one transaction, then revert the frontend merge and wait for Pages. Suspending access revokes the manager RPC grants while retaining sessions and history. The existing registration, payment and organizer workflows use separate functions.
-
-For an approved recovery, correct the cause, apply [restore_access.sql](restore_access.sql) in one transaction, run [the privilege audit](../tests/security_matrix.sql), and verify the anonymous snapshot before restoring the frontend. Use a new versioned migration for database changes after the first installation.
+[Maintainer guide](../../MAINTAINERS_GUIDE.md) · [Disposable practice database](PHONE_REVIEW.md)

@@ -1,6 +1,4 @@
--- EVENT DAY MANAGER PART 9: RESTRICTED REALTIME INVALIDATION SIGNAL
--- REVIEW DRAFT ONLY. Intended for Supabase after earlier Teams Manager SQL.
--- DO NOT apply this directly to the production Supabase database.
+-- Public revision signals for session updates using Supabase Realtime.
 --
 -- Supabase Realtime Broadcast is a notification *only*.
 -- No private row is in the publication or sent to visitors.

@@ -1,5 +1,4 @@
--- EVENT DAY MANAGER PART 8: REGULAR WITHIN-TEAM IN-GAME ROTATION
--- REVIEW DRAFT ONLY. This does NOT borrow a player from another team.
+-- Ordinary within-team changes to the active lineup during a game.
 -- Typical cases: 7-person roster playing 6v6 (middle/libero share time);
 -- 5-person roster playing 4v4; other extra-roster combinations.
 -- A player who actually enters a game is a REGULAR participant, not a sub.

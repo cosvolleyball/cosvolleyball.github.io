@@ -1,6 +1,4 @@
--- EVENT DAY MANAGER — REVIEW DRAFT, PART 2: ORGANIZER TEAM DRAFTS
--- Run AFTER event_day_manager_foundation.sql in a disposable test database.
--- NOT applied to the hosted Supabase project.
+-- Organizer functions for saving private team drafts and publishing rotations.
 --
 -- Organizer submits an array of {seed,playerIds:[session_player_uuid]}.
 -- Everyone physically available (present or waiting) must be assigned

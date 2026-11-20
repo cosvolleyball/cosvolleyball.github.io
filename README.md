@@ -1,23 +1,29 @@
 # Colorado Springs Pickup Volleyball
 
-Public website: https://cosvolleyball.github.io/
+The site handles open-gym registration, waitlists, event-day teams and two-court play. Organizers also manage event settings, check-in, payments, player restrictions and group finances.
 
-A small GitHub Pages site for publishing pickup volleyball sessions, taking registrations, handling waitlists and cancellations, and giving authorized organizers tools for events, check-in, player restrictions, and group finances.
+| Task | Where to go |
+| --- | --- |
+| Find an open gym, register or join a waitlist | [Upcoming events](https://cosvolleyball.github.io/) |
+| Cancel a registration | Open the private management link in the confirmation email. An organizer can help if the email is unavailable. |
+| Create or duplicate an event, record attendance or review finances | [Organizer dashboard](https://cosvolleyball.github.io/?dashboard=1) |
+| Run a pickup session or see the current teams, courts and games | [Teams Manager](https://cosvolleyball.github.io/teams/) · [Event-day guide](TEAM_MANAGER_DESIGN.md) |
 
-## Where things live
+## Running the site locally
 
-- `website/` — **only this folder is published** by GitHub Pages. Source HTML, CSS, JavaScript, images and icons.
-- `tests/` — isolated, fake-backend frontend regression tests; no live registrations, payments, or messages are created.
-- `.github/workflows/deploy.yml` — regression tests, then GitHub Pages deployment from `main`.
-- `.github/workflows/pr-regression.yml` — regression tests on proposed changes.
-- `.github/workflows/supabase-activity-check.yml` — scheduled activity check; separate from event registration and promotion automation.
+From the repository root, start a static server and open `http://localhost:8000`.
 
-## Documentation
+```sh
+python3 -m http.server 8000 --directory website
+```
 
-- [Maintainer guide](MAINTAINERS_GUIDE.md) — safe edits, deployment, security, recovery.
-- [Test checklist](TEST_CHECKLIST.md) — practical post-change and mobile checks.
-- [System architecture](ARCHITECTURE.md) — GitHub Pages, Supabase and email infrastructure.
-- [Backlog](BACKLOG.md) — outstanding and deferred work.
-- [Automated tests](tests/README.md) — local regression-test setup.
+This serves the site files, including the homepage's configured connection to Supabase. For a full practice session with fictional players, a local organizer login and two independent browser views, use the [practice gym](db/release/PHONE_REVIEW.md).
 
-This is a **public repository**. Never commit database credentials, service-role keys, email bridge tokens, private player information, or invitation/registration-management links.
+## Project references
+
+- [Maintainer guide](MAINTAINERS_GUIDE.md) and [architecture](ARCHITECTURE.md) cover site configuration, deployments, data access and email delivery.
+- [Automated tests](tests/README.md), [manager test coverage](TEAM_MANAGER_STAGING_PLAN.md) and the [manual checklist](TEST_CHECKLIST.md) cover website changes.
+- [Database installation and recovery](db/release/README.md) describes the manager migration, verification and access recovery.
+- [Maintenance notes](BACKLOG.md) record deferred work and feature history.
+
+GitHub Pages publishes the contents of `website/`. Database scripts, tests and guides are available in the repository.

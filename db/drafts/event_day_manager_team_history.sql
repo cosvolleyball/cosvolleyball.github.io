@@ -1,5 +1,4 @@
--- EVENT DAY MANAGER PART 5: ORGANIZER-ONLY TEAMMATE HISTORY
--- Review draft, exercised only on isolated PostgreSQL 17 CI database.
+-- Organizer-only teammate history within a session.
 -- Counts *actual completed-game shared appearances*, not assumed rosters.
 -- The IDs are session-player IDs. No history carries between sessions.
 create function public.tm_org_teammate_pairs(p_session_id uuid)

@@ -1,56 +1,32 @@
-# How the system works
+# How the website works
 
-## Three services, separate responsibilities
+GitHub Pages serves the static files in `website/`. The browser uses the project's publishable Supabase key. Row security, grants and database functions determine what each visitor can access.
 
-```text
-Player's browser
-    │
-    ├── GitHub Pages: index.html, styles.css, app.js and images
-    │
-    └── Supabase (public API using publishable key)
-          │
-          ├── Events, registrations, organizers
-          ├── Secure SQL RPCs and Row Level Security
-          └── Private email outbox (inaccessible to site visitors)
-                  │
-                  ▼
-           Google Apps Script scheduled worker
-                  │ securely contacts Supabase Edge Function
-                  ▼
-             Gmail / MailApp
-                  └── sends registration and status-change emails
-```
+## Routes
 
-The scheduled Google Apps Script job retrieves queued email notifications through the authenticated `volleyball-email-bridge` Edge Function. It reports sending outcomes to Supabase. The live site never stores the Gmail bridge token.
+| Route | Purpose |
+| --- | --- |
+| `/` | Public upcoming events. Signed-in organizers can also see private events. |
+| `/?dashboard=1` | Organizer sign-in and the event, check-in, access and finance controls |
+| `/?event=<uuid>` | A published public event |
+| `/?invite=<uuid>` | A published private event accessible through its invitation link |
+| `/?manage=<uuid>` | A player's private registration-management and cancellation page, linked from the confirmation email |
+| `/teams/` | Public game-day teams and courts, with additional controls for signed-in organizers |
 
-## Page and link types
+## Registration and email
 
-- `/` — Public Upcoming Events; signed-in **organizers** also see private upcoming events.
-- `/?dashboard=1` — Organizer dashboard (sign-in required for data).
-- `/?event=<uuid>` — Published public event detail page.
-- `/?invite=<uuid>` — Published private event detail page, shared only by direct link.
-- `/?manage=<uuid>` — Private player registration page, reached from confirmation email; no player account needed.
+The registration function locks the event row while checking capacity. It creates a confirmed registration or a waitlist entry. When a spot opens, eligible waitlisted players can be promoted. Public roster functions return display names and status. Access to private-event rosters requires the invitation link, and organizer access controls protect contact details, restrictions and finances.
 
-**Important:** Removing the management link from the registration success banner does **not** remove the `?manage=` route. Its existence is essential to self-cancellation and waitlist promotion.
+New registrations accept Venmo and cash. Existing payment entries retain their original recorded methods. Confirmation and status changes are queued in a private email outbox. A scheduled Google Apps Script worker retrieves notifications through the authenticated `volleyball-email-bridge` Supabase Edge Function, sends them through Gmail/MailApp and reports delivery outcomes. A delayed message can be investigated independently of a successful registration. The email's management link supports self-cancellation.
 
-## Server-side security
+## Event-day data
 
-- Public event RPC only returns published public events.
-- Private event lookups and rosters require the correct invitation token.
-- Direct access to contact information is restricted to authenticated organizers through Supabase policies.
-- Registration RPC locks the event row to enforce capacity and prevent overbooking.
-- A secure trigger automatically promotes the first waitlisted player when a confirmed spot opens.
-- Email notifications are queued by database triggers, then sent asynchronously by Gmail worker.
-- An INSERT-only trigger limits new registration methods to `venmo` and `cash` without changing older records or the core registration RPC.
+The manager reads the selected event, registration roster and organizer membership from the existing COS database. Dedicated manager tables hold profiles, session attendance, rotations, teams, games, appearances and audit history. The browser uses scoped functions to read public court information and submit permitted game actions. Organizer functions also verify membership in `public.organizers`.
 
-## What this release intentionally does not change
+Realtime broadcasts signal that the session changed. Clients fetch the latest snapshot and poll for missed updates. Database checks serialize competing court actions. Email addresses, profile attributes and participation totals are private to organizers. Public session information includes the live event title, published rosters, courts and games.
 
-- Supabase table schema and existing registration identifiers
-- Private invitation tokens and public event URLs
-- Organizer accounts, RLS policies, and payment history
-- Email queue, Edge Function, Google Apps Script, or schedule
-- Existing cancellation link structure and auto-promotion trigger
+## Recovery
 
-## Failure and recovery
+A failed static-site release can be reverted and republished through GitHub Pages. The manager API can be suspended or restored separately from the website while retaining its tables and history. Private invitation and registration-management tokens are bearer credentials and belong outside public issues, logs and calendar exports.
 
-Registration succeeds independently of email delivery. If Gmail cannot deliver a notification, the queue maintains status information for an organizer to investigate. A player who has lost their email can contact the organizer for manual cancellation. Keep private management tokens out of support screenshots and public issues.
+[Site maintenance](MAINTAINERS_GUIDE.md) · [Manager database recovery](db/release/README.md)

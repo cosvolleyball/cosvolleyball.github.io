@@ -47,7 +47,7 @@ jobs:
           fi
       - name: Build fake baseline schema (isolated container)
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/fixture.sql
-      - name: Apply Teams Manager review draft to test database ONLY
+      - name: Install the manager foundation in the test database
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_foundation.sql
       - name: Apply organizer draft and publication RPCs to test database ONLY
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_rotations.sql
@@ -95,7 +95,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/concurrency_transfer_setup.sql
       - name: Ensure independent public transfer requests cannot move the same player twice
         run: bash db/tests/concurrency_transfer.sh
-      - name: Install local-only public write rate-limiter draft
+      - name: Install public action limits in the test database
         run: psql -X -v ON_ERROR_STOP=1 -1 -f db/drafts/event_day_manager_public_limits.sql
       - name: Verify bounded public activity and atomic rejection
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/abuse_limits.sql

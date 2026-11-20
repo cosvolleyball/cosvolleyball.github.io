@@ -2,8 +2,7 @@
 -- No Supabase credentials, network access or production data needed.
 create schema auth;
 -- Local-only emulation of Supabase's managed Realtime Broadcast function.
--- The sandbox records each message so we can assert it carries no private
--- player attributes. This shim is never deployed to a hosted project.
+-- The fixture records each message for the public-payload assertions. This shim is never deployed to a hosted project.
 create schema realtime;
 create table realtime.tm_test_broadcast (
   id bigint generated always as identity primary key,

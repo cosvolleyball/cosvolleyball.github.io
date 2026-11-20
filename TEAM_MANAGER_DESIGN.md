@@ -1,129 +1,62 @@
-# Event Day Teams Manager — living design
+# Running an open gym with Teams Manager
 
-The release candidate is on [PR #6](https://github.com/cosvolleyball/cosvolleyball.github.io/pull/6). This document describes the organizer and player workflows.
+[Open Teams Manager](https://cosvolleyball.github.io/teams/) to see the current session. Players can use the page without an account. Organizers sign in with the same account used for the [event dashboard](https://cosvolleyball.github.io/?dashboard=1), then open **Teams Manager** from the navigation. One session can run at a time.
 
-## Product boundary
+## Start the session and adjust attendance
 
-- Add a **Teams Manager** link in the existing navigation, replacing the existing external **Teams** link; no second site or repo.
-- One shared public view of **one active session at a time**, attached to a published event selected by an authorized organizer. The source event may be public or private.
-- Use the **existing COS Volleyball Supabase project** and the organizer-selected event's actual `public.registrations` to populate the attendance review; **never** use the Tournament Builder database or create another independent player registry.
-- Import both registered and waitlisted entries (dedupe on normalized player email), excluding cancellations. **Confirmed registered players start included/assumed present** so the organizer does not have to individually check everyone in. **Waitlisted players appear in the roster but start excluded** until the organizer includes those who arrive.
-- Organizer handles **exceptions only**: one-click mark a no-show (excluded from team generation), restore an arrival to present, include a waitlisted player, and add/check-in walk-ins. No-shows, breaks and Teams Manager attendance changes affect only manager tables, **never** the official registration, waitlist, payment or finance records.
-- Registration order and waitlist promotion order do not determine team assignments or substitutions.
-- Registration, cancellation, payment, finance, email notification, access restriction and Supabase Cron workflows must remain unchanged.
-- When no session is active, show "No active volleyball session right now."
-- Organizer-only UI reveals private profile fields and participation statistics; public UI reveals only display names, teams, courts, games, and permitted game/substitution actions.
+1. Under **Session controls**, choose a published **Source event**, select a playing format and click **Start session**. Both public and private events are available to organizers. During a session, the public manager displays the event title, published team rosters and court activity, including for an invitation-only source event.
+2. Confirmed registrations start **Included**. Waitlisted players start **Not included**. Canceled registrations are omitted. The import matches players by normalized email and gives a confirmed entry priority over a waitlist entry for the same person.
+3. Use **Mark no-show** for someone who is absent and **Include** for someone who arrives. For a walk-in, enter a name and email under **Add walk-in**, then select **Add and check in**. These attendance changes are recorded in the session roster. The event's registration, waitlist and payment records are maintained separately.
+4. Optional private profile fields include skill (1–10), gender and up to two preferred positions. Players with incomplete profiles can still play. Changes to balancing information apply the next time teams are generated.
 
-## Player profiles and availability
+## Prepare and publish teams
 
-- Persistent organizer-managed profile with a UUID and **normalized email unique lookup key** (lowercase + trim). The internal UUID survives an email change or merge.
-- Optional skill (integer 1–10), optional gender, and up to two preferred positions. Missing values never exclude a player or create assumed values.
-- Only organizers enter, update, or link profiles. Updates during an event affect future team generations, not games already underway.
-- Attendance statuses include assumed present, pending/waitlisted, no-show/absent, waiting, break and departed. Attendance belongs to Teams Manager, independent of event registration's attendance/payment fields. Present/waiting are eligible for new teams; absent/pending are not.
-- Departures and breaks create openings; **do not reshuffle before the rotation ends**.
-- Returning from a break reclaims a temporarily substituted spot **between games** unless a late arrival has already filled the spot for the rotation. In that case the returning player is waiting.
-- Late arrivals wait when teams are full. They may fill an opening between games on an eligible team; never interrupt a live game. Marking a permanent replacement is different from recording a one-game substitute.
+The organizer chooses **Number of teams** and **Playing format** for each rotation. The page shows which combinations the available players can support and flags arrangements that rely on borrowed players. Private events offer 4v4 and 6v6. Public events also offer 5v5.
 
-## Team generation
+| Example with 25 available | Distribution |
+| --- | --- |
+| Four teams playing 6v6 | 7, 6, 6, 6 |
+| Five teams playing 5v5 at a public event | 5, 5, 5, 5, 5 |
+| Six teams playing 4v4 | 5, 4, 4, 4, 4, 4 |
 
-- Organizers generate **preview drafts**, regenerate as often as needed, manually swap/move players, undo local edits, and explicitly publish.
-- Independent toggles: skill balance, gender balance, preferred-position balance. Position balancing is disabled when the **playing format is 4v4**.
-- Generate balanced teams with randomized tie-breaking and penalties for repeated teammate pairings across the *current session*. Previous sessions do not affect participation/game counts.
-- **Before every organizer-initiated reshuffle**, recount currently checked-in/available players and ask for the **number of teams (4/5/6)** and the **playing format (4v4/5v5/6v6)**. These are separate choices, stored **on each rotation**, not fixed for the event. Display the exact roster distribution and flag options requiring temporary borrowed players.
-- Example **25 available**: six 4v4 teams of sizes **5,4,4,4,4,4**, five 5v5 teams of **5 each** (public events only), or four 6v6 teams of sizes **7,6,6,6**. Private competitive event formats remain limited to 4v4/6v6.
-- Teams with an extra roster member (e.g., seven for 6v6 or five for 4v4) can rotate a **teammate within a live game** using a one-for-one regular lineup change, without borrowing from a different team. Both players receive one **regular** appearance if they actually take the court; re-entry never counts twice. This does not change the existing five-team transfer / six-team temporary-sub rules.
-- For seven-player 6v6 rosters and optional position balancing, look for compatible **front-row/back-row shared-role pairings** (e.g., middle blocker and libero) and show organizer-only suggestions. Keep preferred-position attributes private, never hardcode an assumption that every team must have a libero/middle pairing, and do not force volleyball position swaps without players agreeing.
-- Do not require every roster to be divisible by the number of on-court positions. Distribute all present, available players into team rosters when feasible.
-- A roster may contain one or more extra players (e.g., five-person roster in a 4v4 match); the **actual lineup for each match** determines who played. Between-match lineup rotation must give extra roster members opportunities without midgame forced swaps.
-- Organizers may override the recommended distribution and court assignments before publication.
-- Once published, the team structure stays fixed until the rotation finishes or an organizer ends it early. Explicit departures, replacements, and game-specific temporary substitutes (six-team format) or between-game permanent transfers (five-team format) are exceptions; they are not a full team reshuffle.
+Select **Generate / regenerate** to preview the teams. Skill, gender and position balancing can be selected independently where available. Position balancing is available for 5v5 and 6v6. The generator also considers regular games played and previous teammates in the current session. A seven-player team may have a suggested front-row/back-row pairing.
 
-## Schedules — validated mathematical core
+In the preview, swap or move players, swap whole teams' opening court slots, or use **Undo last edit**. **Save private draft** stores the current preview. **Publish teams** puts the teams and games on the public page.
 
-A **game round** is one scheduled game per active court. A **rotation** comprises three such rounds and ends in a new team reshuffle.
+## Play on two courts
 
-### Four teams: full round robin
+A rotation has three rounds and six games. The team numbers below match the opening slots in the manager. W1 and L1 are the winner and loser of Court 1's opening game. W2 and L2 refer to Court 2's opener.
 
-| Round | Court 1 | Court 2 |
-|---|---|---|
-| 1 | A–B | C–D |
-| 2 | A–C | B–D |
-| 3 | A–D | B–C |
+| Teams | Round | Court 1 | Court 2 |
+| --- | --- | --- | --- |
+| 4 | 1 | 1 vs 2 | 3 vs 4 |
+| 4 | 2 | 1 vs 3 | 2 vs 4 |
+| 4 | 3 | 1 vs 4 | 2 vs 3 |
+| 5 | 1 | 1 vs 2 | 4 vs 5 |
+| 5 | 2 | W1 vs 3 | W2 vs L1 |
+| 5 | 3 | W1 vs L2 | W2 vs 3 |
+| 6 | 1 | 1 vs 2 | 4 vs 5 |
+| 6 | 2 | W1 vs 3 | W2 vs 6 |
+| 6 | 3 | L1 vs 3 | L2 vs 6 |
 
-Six unique matches. Every team plays **three**, no resting team while both courts play. This means **resting-team substitution is unavailable** in a standard four-team round; extra roster players may rotate into a team's on-court lineup **during or between** matches as ordinary teammates.
+With four teams, each team plays every other team. With five, the opening winners play three games and the other teams play two. Some teams change courts. With six, each court has a group of three and every team plays twice.
 
-### Six teams: three teams permanently assigned per court
+Either players or organizers can select **Start game** on a ready game. At the end, select the winning team and click **Report winner**. The first accepted result updates both views. **Waiting for other court** means an earlier game or team is still needed. Results and lineups refresh automatically.
 
-| Round | Court 1 (A, B, C) | Court 2 (D, E, F) |
-|---|---|---|
-| 1 | A–B | D–E |
-| 2 | Winner R1–C | Winner R1–F |
-| 3 | Loser R1–C | Loser R1–F |
+## Substitutes, late arrivals and corrections
 
-Six matches, each team plays **exactly two**, independent of results. Each court can advance on its own.
+| Situation | How to record it |
+| --- | --- |
+| An extra teammate rotates in during a game | Under that game, choose the player leaving and the teammate entering. Both receive a regular appearance when the game is completed. Re-entry counts once. |
+| A six-team roster needs another player | Before starting the game, record an available volunteer from the resting team assigned to that court. A one-game substitute returns to their team afterward. The live game's emergency substitute control handles an injury. |
+| A five-team rotation needs a transfer | Between games, choose the player and destination team. Both teams must be idle and the source team must retain enough available players. The transfer lasts until the next reshuffle. |
+| A player takes a break, leaves or arrives late | The organizer updates attendance. Under **Late arrivals and replacements**, an eligible arrival can fill an open spot or replace an unavailable player between games. Other teams keep their assignments. |
+| A winner, transfer or appearance was recorded incorrectly | The organizer can correct a completed winner while the session is active if affected later games have not started. The session controls also include **Correct a five-team transfer** and **Correct a recorded participant**. |
 
-### Five teams: opening winners earn a third game
+## Reshuffle or close
 
-First round: A–B on Court 1 and C–D on Court 2, with E resting. Denote the opening winners W1 and W2, losers L1 and L2.
+A rotation completes after its scheduled games. **End rotation early** keeps completed results and abandons unfinished games. The organizer can then choose a different team count or format, review a new draft and publish the next rotation.
 
-| Round | Court 1 | Court 2 |
-|---|---|---|
-| 1 | A–B | C–D |
-| 2 | W1–E | W2–L1 |
-| 3 | W1–L2 | W2–E |
+**End session and view stats** closes the public session and shows the organizer each player's rotations played, regular games, substitute games and wins. Only completed games count. A player earns one rotation played for appearing in one or more completed games in that rotation. The public page returns to **No active volleyball session right now**.
 
-Opening winners get **three** games; the other three teams get **two**. All six matches have unique pairings; no team is double-booked in the same round. Subsequent team placement should favor players with fewer **regular** games for the opening-match opportunity, without guaranteeing a win. A substitute appearance is **not** included in regular-game balancing.
-
-**Scheduling constraints that must be visible in UI:**
-- Five-team scheduling requires some teams to **move between courts**, unlike six-team scheduling. A dependent game may wait for the *other* court's result, and that is acceptable: display "Waiting for other court" rather than starting with an unavailable team.
-- Exactly **one team rests per round** in a five-team/two-court schedule. There is no fixed assignment of teams to courts, and a resting team could be needed on either court next. **Therefore temporary substitutions are disabled in five-team rotations.** Use a valid between-game permanent transfer instead.
-- A transfer changes a player's team membership for the **remainder of the current rotation only**. It cannot happen in the middle of a game or cause either team to fall below the playable lineup size. At the next team reshuffle, players are all available for new assignment.
-- Prevent starting a match if a team or player is unavailable due to a still-active game on the other court. A match may wait for a prerequisite result; this is not considered a permanent court assignment.
-
-The scheduling tests enumerate opening outcomes. The database checks readiness against the actual results and active lineups on both courts before allowing a game to start.
-
-## Temporary substitutes and rotation-long transfers
-
-### Six-team rotations: temporary one-game substitutes
-
-- Players arrange substitutions in person. Routine substitutions require **no organizer approval**.
-- Anyone with the public Teams Manager link may **record** a same-court, available, consenting substitute, subject to strict server validation; the organizer can correct a mistake.
-- The substitute must come from a **resting team assigned to the same court** as the team needing help, never from the other court. A player cannot play two simultaneous games.
-- One-game substitutions do not permanently change team membership; these **substitute appearances are tracked separately** from regular game counts and are visible to organizers only.
-- When no eligible substitute exists, a match may be deferred or played short-handed if the selected format permits it. Do not forcibly reshuffle.
-
-### Five-team rotations: transfers until next reshuffle
-
-- **No temporary substitutions.** Since teams move across courts, borrowing a resting player for only one game may create a conflict when the player's original team needs them next.
-- Instead, when teams agree and a transfer is legal, move a player to another team **between games**. The transfer persists for the **remainder of that rotation** and resets at the next organizer-published reshuffle.
-- Neither the origin nor destination team may be playing when the transfer is applied. The origin team must still have enough available players to meet the chosen on-court format. Reject moves that would double-book a player or leave the original team unable to play.
-- Record the transfer and the player's **actual regular game appearances**, not phantom appearances based on the team's prior schedule. They are **not substitute appearances**.
-- If no legal transfer is available, wait until a suitable game boundary, play a supported smaller format, or defer the game; never force a mid-game interruption or automatically borrow across courts.
-
-### Other roster changes
-
-- Permanent late-arrival replacements are organizer-managed changes between games. Replacements, breaks, and departures do not automatically trigger a whole-rotation reshuffle.
-
-## Public game workflow
-
-- Public view updates without manual refresh (real-time notification, then request a **sanitized public snapshot**; reconnect and recover after disconnection).
-- Anyone with the link can mark an eligible game started and submit its **winner only**, with a confirmation prompt.
-- First valid database write wins; the next concurrent/stale submission is rejected and refreshed.
-- Only organizers can correct completed winners. Correcting a result automatically updates downstream matchups only before affected games start. Otherwise block automatic edits and require an organizer resolution.
-- Courts advance separately **where match dependencies permit**; five-team cross-court dependencies may require waiting.
-- Public action access must not imply access to profiles, email addresses, statistics, restricted event details or original management/invitation tokens.
-
-## Ending and closing
-
-- A rotation ends after all planned games or when an organizer confirms early termination. Completed games are retained, unplayed/unfinished games are marked abandoned without awarding a win or a completed appearance.
-- Organizer alone generates/previews/publishes the next rotation. The current published rotation stays visible until the replacement is published.
-- At end of the session, organizer-only summary reports wins, rotations, regular games and substitute appearances. The public view returns to its inactive state.
-- Session history may remain privately for troubleshooting but never influences future session game totals. Persistent profile attributes survive.
-
-## Database and privacy
-
-The manager reads the organizer-selected event from `public.events`, imports its roster from `public.registrations`, and verifies organizer membership through `public.organizers`. It keeps its profiles, attendance, teams, appearances, corrections and action history in dedicated manager tables. The organizer-only participation summary counts a rotation once per player who appeared in at least one completed game in that rotation.
-
-Browser clients use scoped database functions. Organizer functions check the signed-in account. Players see a sanitized public snapshot and can start games, report winners, record valid substitutes, rotate a teammate or record a permitted five-team transfer. The database serializes competing changes and rejects actions that became stale while waiting. Realtime broadcasts carry a revision signal. Each client fetches the appropriate snapshot and polls for missed updates.
-
-[Verification and test coverage](TEAM_MANAGER_STAGING_PLAN.md) · [Release migration and recovery](db/release/README.md)
+[Practice with a fictional roster](db/release/PHONE_REVIEW.md) · [Database and access model](ARCHITECTURE.md)

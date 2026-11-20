@@ -21,7 +21,7 @@ export async function serveTeamsPreview({api, publicKey, lan}) {
   ]);
   const types={'.html':'text/html','.css':'text/css','.mjs':'text/javascript','.svg':'image/svg+xml','.png':'image/png'};
   const login=`<!doctype html><meta name="viewport" content="width=device-width"><title>Local organizer sign-in</title>
-  <h1>Local test organizer</h1><p>Enter the temporary password printed on your computer.</p>
+  <h1>Local test organizer</h1><p>The practice password appears in the host terminal.</p>
   <form><label>Email <input id="email" value="organizer@phone-review.example.invalid" type="email" required autocomplete="username"></label><br>
   <label>Password <input id="password" type="password" required autocomplete="current-password"></label><br><button>Sign in</button></form><p id="message"></p>
   <script src="/staging-config.js"></script><script type="module">
