@@ -25,5 +25,6 @@ psql -X -v ON_ERROR_STOP=1 -1 -f db/release/suspend_access.sql >/dev/null
 [[ "$(psql -X -At -c "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and left(p.proname,3)='tm_' and (has_function_privilege('anon',p.oid,'execute') or has_function_privilege('authenticated',p.oid,'execute'))")" == 0 ]]
 psql -X -v ON_ERROR_STOP=1 -1 -f db/release/restore_access.sql >/dev/null
 psql -X -v ON_ERROR_STOP=1 -f db/tests/security_matrix.sql >/dev/null
+psql -X -v ON_ERROR_STOP=1 -f db/tests/team_game_participation.sql >/dev/null
 [[ "$(psql -X -At -c "$fingerprint")" == "$before" ]]
 echo 'PASS: fresh release, duplicate-install gate, suspend/restore grants, unchanged source rows'

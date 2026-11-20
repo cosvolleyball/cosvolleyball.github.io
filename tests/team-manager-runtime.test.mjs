@@ -13,7 +13,7 @@ const optionsCode=fs.readFileSync(path.join(root,"rotation-options.mjs"),"utf8")
 const profileCode=fs.readFileSync(path.join(root,"profile-options.mjs"),"utf8").replace(/^export /gm,"");
 
 async function boot({initialSnapshot,organizer=false,organizerRoster=[],
-  lineupByGame={},organizerAppearances={},transferHistory=[],
+  organizerAppearances={},transferHistory=[],
   staging=true,rpcOverride=null}={}){
   const dom=new JSDOM(page,{
     url:"https://test.local/teams/",
@@ -81,8 +81,6 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
         return {data:null,error:null};
       }
       if(name==="tm_org_roster")return {data:organizerRoster,error:null};
-      if(name==="tm_public_game_lineup")
-        return {data:lineupByGame[args?.p_game_id]||[],error:null};
       if(name==="tm_org_game_appearances")
         return {data:organizerAppearances[args?.p_game_id]||[],error:null};
       if(name==="tm_org_transfers")return {data:transferHistory,error:null};
@@ -323,26 +321,18 @@ test("organizer replaces a departed roster player with a late arrival between ga
   }finally{t.close();}
 });
 
-test("six-team emergency injury sub replaces an active participant",async()=>{
+test("a live six-team game offers the team result and no individual substitutions",async()=>{
   const teams=makeTeams(6);
-  const t=await boot({initialSnapshot:{
+  const t=await boot({organizer:true,initialSnapshot:{
     active:true,session_id:"session",format:6,revision:3,
-    rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams,
-    games:[{id:"game1",round:1,court:1,status:"playing",
-      team_a_id:"team1",team_b_id:"team2",winner_team_id:null}]
-  },lineupByGame:{game1:[
-    {player_id:"person1",name:"Person 1",team_id:"team1",is_substitute:false},
-    {player_id:"person2",name:"Person 2",team_id:"team2",is_substitute:false}
-  ]}});
+    rotation_id:"rot",rotation_status:"published",teams,
+    games:[{id:"game1",round:1,court:1,status:"playing",team_a_id:"team1",team_b_id:"team2"}]
+  }});
   try{
     const doc=t.dom.window.document;
-    doc.querySelector('[data-emergency-out="game1"]').value="person1";
-    doc.querySelector('[data-emergency-in="game1"]').value="person3";
-    doc.querySelector('[data-tm-game-action="emergency"]').click();
-    await pause();
-    assert(t.calls.some(c=>c.name==="tm_public_emergency_sub"&&
-      c.args?.p_out_player_id==="person1"&&
-      c.args?.p_in_player_id==="person3"));
+    assert.deepEqual([...doc.querySelectorAll(".tm-game [data-tm-game-action]")].map(b=>b.dataset.tmGameAction),["winner"]);
+    assert(doc.querySelector("#tm-appearance-correction").hidden);
+    assert(!t.calls.some(c=>c.name==="tm_public_game_lineup"));
   }finally{t.close();}
 });
 
@@ -427,32 +417,17 @@ test("another court can start while a player is choosing their game winner", asy
   } finally { t.close(); }
 });
 
-test("anonymous seven-player team can record a normal 6v6 teammate rotation",async()=>{
+test("all seven players stay on the published team while a 6v6 game is playing",async()=>{
   const teams=makeTeams(4);
-  teams[0].players=Array.from({length:7},(_,i)=>({
-    id:"team1-"+i,name:"Team 1 Player "+i
-  }));
-  const playing=teams[0].players.slice(0,6).map(p=>({
-    player_id:p.id,name:p.name,team_id:"team1",is_substitute:false
-  }));
-  const t=await boot({initialSnapshot:{
-    active:true,session_id:"session",format:6,revision:8,
-    rotation_id:"rot",rotation_status:"published",event_title:"Open gym",teams,
-    games:[{id:"game1",round:1,court:1,status:"playing",
-      team_a_id:"team1",team_b_id:"team2",winner_team_id:null}]
-  },lineupByGame:{game1:playing}});
+  teams[0].players=Array.from({length:7},(_,i)=>({id:"team1-"+i,name:"Player "+i}));
+  const t=await boot({initialSnapshot:{active:true,session_id:"session",format:6,revision:8,
+    rotation_id:"rot",rotation_status:"published",teams,
+    games:[{id:"game1",round:1,court:1,status:"playing",team_a_id:"team1",team_b_id:"team2"}]}});
   try{
     const doc=t.dom.window.document;
-    const key="game1-team1";
-    assert(doc.querySelector('[data-tm-game-action="rotate-teammate"]'));
-    doc.querySelector('[data-rotate-out="'+key+'"]').value="team1-0";
-    doc.querySelector('[data-rotate-in="'+key+'"]').value="team1-6";
-    doc.querySelector('[data-tm-game-action="rotate-teammate"]').click();
-    await pause();
-    assert(t.calls.some(c=>c.name==="tm_public_rotate_teammate"&&
-      c.args?.p_out_player_id==="team1-0"&&
-      c.args?.p_in_player_id==="team1-6"));
-    assert(doc.querySelector("#tm-organizer").hidden);
+    assert.equal(doc.querySelector(".tm-team").querySelectorAll("li").length,7);
+    assert.deepEqual([...doc.querySelectorAll(".tm-game button")].map(b=>b.textContent.trim()),["Report winner"]);
+    assert(!t.calls.some(c=>c.name==="tm_public_game_lineup"));
   }finally{t.close();}
 });
 
@@ -642,11 +617,12 @@ test("profile dropdowns save skill, one gender, up to two positions or Flex alon
     box("right side").click();
     assert.deepEqual(checked(),["outside","setter"]);
     const openPicker=select("[data-positions]");
-    openPicker.open=true;
+    const trigger=openPicker.querySelector("[popovertarget]");
+    assert.equal(trigger.getAttribute("popovertarget"),openPicker.querySelector("[popover]").id);
     t.setSnapshot({...activePrivateSession,revision:2});
     await t.refresh();
     assert.equal(select("[data-positions]"),openPicker);
-    assert(openPicker.open);
+    assert.equal(select("[data-positions] [popovertarget]"),trigger);
     assert.deepEqual(checked(),["outside","setter"]);
     await save();
     assert.equal(select("[data-skill]").value,"10");

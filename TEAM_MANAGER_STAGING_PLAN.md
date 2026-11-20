@@ -7,7 +7,7 @@ The automated suites use fictional players and disposable databases. The local i
 | [Frontend regression workflow](.github/workflows/pr-regression.yml) | Existing site workflows, scheduling, team balance, roster distributions, organizer controls, sign-out and interrupted refreshes |
 | [Database contracts](.github/workflows/team-manager-db-contracts.yml) | All rotation schedules, game eligibility, participation, corrections, late arrivals, competing requests and rate-limit recovery on PostgreSQL 17 |
 | Migration and access recovery in the database contracts | Install on a fresh baseline, verify grants, reject a duplicate installation, suspend and restore access, compare source event and registration records |
-| [Chromium and WebKit](.github/workflows/team-manager-browser-qa.yml) | Public game controls, five-team transfers, seven-player team rotations, organizer attendance and logout at desktop and phone widths |
+| [Chromium and WebKit](.github/workflows/team-manager-browser-qa.yml) | Team results with extra players, five-team transfers, organizer attendance, floating position checkboxes and logout at desktop and phone widths |
 | [Local Supabase integration](.github/workflows/team-manager-local-supabase.yml) | Real local Auth, PostgREST and Realtime. A signed-in organizer and anonymous player run a 25-player session, record a winner, reshuffle and close it. |
 | [Phone practice gym](db/release/PHONE_REVIEW.md) | Touch interaction on a physical device, private tabs and recovery after backgrounding the browser |
 

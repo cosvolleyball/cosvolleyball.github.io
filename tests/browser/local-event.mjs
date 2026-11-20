@@ -37,12 +37,13 @@ try {
   const first = organizer.locator('[data-player-row]').filter({has:organizer.getByText('Practice Player 1',{exact:true})});
   await first.locator('[data-skill]').selectOption('9');
   await first.locator('[data-gender]').selectOption('female');
-  await first.locator('summary').click();
+  await first.locator('.tm-position-trigger').click();
   await first.getByLabel('Outside',{exact:true}).check();
   await first.getByLabel('Setter',{exact:true}).check();
   assert(await first.getByLabel('Middle',{exact:true}).isDisabled());
   await first.getByLabel('Flex (all positions)',{exact:true}).check();
   assert.equal(await first.locator('[data-position]:checked').count(),1);
+  await first.getByRole('button',{name:'Done',exact:true}).click();
   await first.getByRole('button',{name:'Save',exact:true}).click();
   await organizer.getByText('Player profile saved.',{exact:false}).waitFor();
   await organizer.reload();
@@ -85,20 +86,13 @@ try {
   for (const court of await player.locator('.tm-court').all())
     await court.locator('[data-tm-game-action="start"]').first().click();
   await player.waitForFunction(()=>document.querySelectorAll('.tm-game.is-playing').length===2);
-  const swap = player.locator('[data-tm-game-action="rotate-teammate"]').first();
-  await swap.waitFor();
-  const block = swap.locator('..');
-  const [outgoing] = await block.locator('[data-rotate-out]').selectOption({index:1});
-  await block.locator('[data-rotate-in]').selectOption({index:1});
-  await swap.click();
-  await player.waitForFunction(()=>{
-    const feedback=document.querySelector('#tm-feedback');
-    return feedback.classList.contains('is-error') || feedback.textContent.includes('Teammate rotation recorded');
-  });
-  assert.match(await player.locator('#tm-feedback').innerText(),/Teammate rotation recorded/);
-  await block.locator('[data-rotate-in] option[value="'+outgoing+'"]').waitFor({state:'attached'});
-  const game = player.locator('.tm-game.is-playing').first();
-  await game.locator('[data-report-winner]').selectOption({index:1});
+  const seven=player.locator('#tm-public .tm-team').filter({has:player.locator('li:nth-child(7)')});
+  const teamLabel=await seven.locator('h3').innerText();
+  const members=await seven.locator('li').allTextContents();
+  const game=player.locator('.tm-game.is-playing').filter({has:player.locator('option').filter({hasText:teamLabel})});
+  assert.equal(await game.locator('button').count(),1);
+  assert.equal(await game.locator('select').count(),1);
+  await game.locator('[data-report-winner]').selectOption({label:teamLabel});
   await game.getByRole('button',{name:'Report winner'}).click();
   await organizer.locator('.tm-game.is-completed').first().waitFor();
 
@@ -132,6 +126,9 @@ try {
   await player.getByText('No active volleyball session right now.').waitFor();
   await organizer.locator('#tm-final-stats').waitFor();
   assert.match(await organizer.locator('#tm-final-stats-body').innerText(),/Practice Walk-in/);
+  const winners=await organizer.locator('#tm-final-stats-body tbody tr').evaluateAll(rows=>
+    rows.filter(r=>r.cells[4].textContent==='1' && r.cells[2].textContent==='1').map(r=>r.cells[0].textContent));
+  assert.deepEqual(winners.sort(),members.sort());
   assert.deepEqual(problems,[]);
   console.log('PASS: signed-in organizer and anonymous browser completed a 25-player event on the local release.');
 } finally {
