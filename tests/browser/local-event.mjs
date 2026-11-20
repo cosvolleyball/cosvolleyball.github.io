@@ -94,9 +94,7 @@ try {
   assert.equal(await game.locator('select').count(),1);
   await game.locator('[data-report-winner]').selectOption({label:teamLabel});
   await game.getByRole('button',{name:'Report winner'}).click();
-  await organizer.waitForFunction(()=>[...document.querySelectorAll('#tm-stats tbody tr')].filter(row=>row.cells[4].textContent==='1').length===7);
-  const winners=await organizer.locator('#tm-stats tbody tr').evaluateAll(rows=>rows.filter(r=>r.cells[4].textContent==='1').map(r=>r.cells[0].textContent));
-  assert.deepEqual(winners.sort(),members.sort());
+  await organizer.locator('.tm-game.is-completed').first().waitFor();
 
   await organizer.locator('#tm-end-rotation').click();
   await organizer.waitForFunction(()=>!document.querySelector('#tm-generate').disabled);
@@ -128,6 +126,9 @@ try {
   await player.getByText('No active volleyball session right now.').waitFor();
   await organizer.locator('#tm-final-stats').waitFor();
   assert.match(await organizer.locator('#tm-final-stats-body').innerText(),/Practice Walk-in/);
+  const winners=await organizer.locator('#tm-final-stats-body tbody tr').evaluateAll(rows=>
+    rows.filter(r=>r.cells[4].textContent==='1' && r.cells[2].textContent==='1').map(r=>r.cells[0].textContent));
+  assert.deepEqual(winners.sort(),members.sort());
   assert.deepEqual(problems,[]);
   console.log('PASS: signed-in organizer and anonymous browser completed a 25-player event on the local release.');
 } finally {

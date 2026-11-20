@@ -200,10 +200,13 @@ async function verifyPositionDropdown(page) {
     const rect=el.getBoundingClientRect();
     return [rect.height,el.nextElementSibling.getBoundingClientRect().top-rect.top];
   });
+  // The site swaps in its web fonts after first paint. Measure the settled
+  // roster so a font swap cannot be mistaken for movement from the menu.
+  await page.evaluate(async()=>{await document.fonts.ready;});
   await trigger.evaluate(el=>el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'}));
-  const before=await geometry();
   assert(await menu.isHidden());
   await trigger.focus();
+  const before=await geometry();
   await page.keyboard.press('Enter');
   await menu.waitFor();
   assert.equal(await menu.locator("label").first().evaluate(el=>getComputedStyle(el).flexDirection),"row");
