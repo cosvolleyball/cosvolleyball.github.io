@@ -87,7 +87,7 @@ try {
     await court.locator('[data-tm-game-action="start"]').first().click();
   await player.waitForFunction(()=>document.querySelectorAll('.tm-game.is-playing').length===2);
   const seven=player.locator('#tm-public .tm-team').filter({has:player.locator('li:nth-child(7)')});
-  const teamLabel=await seven.locator('h3').innerText();
+  const teamLabel=await seven.getByRole('heading').innerText();
   const members=await seven.locator('li').allTextContents();
   const game=player.locator('.tm-game.is-playing').filter({has:player.locator('option').filter({hasText:teamLabel})});
   assert.equal(await game.locator('button').count(),1);
