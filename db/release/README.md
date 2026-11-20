@@ -8,6 +8,7 @@ The website and manager use the **Colorado Springs Pickup Volleyball** Supabase 
 | --- | --- |
 | [Initial migration](migrations/20261120033246_event_day_manager.sql) | Complete, ordered installation, including dependency checks, grants and PostgREST schema reload |
 | [Profile choices and five-team transfers](migrations/20261120094220_team_manager_profiles_and_transfers.sql) | Validates changed profile choices and restricts public transfers to available players who can fill a vacancy between games |
+| [Team game participation](migrations/20261120170249_team_game_participation.sql) | Records available teammates and pre-game substitutes at game start and awards credit from the team result |
 | [Preflight](preflight.sql) | Read-only checks for the first installation, including source columns, importable data, Realtime and conflicting manager objects |
 | [Privilege audit](../tests/security_matrix.sql) | Read-only verification of table access and database functions after installation or recovery |
 | [Suspend access](suspend_access.sql) and [restore access](restore_access.sql) | Temporarily disable or restore the manager API while retaining its data |

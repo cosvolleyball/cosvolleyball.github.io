@@ -66,7 +66,7 @@ const browser=await ({chromium,webkit}[engine]).launch({headless:true,
   ...(engine==="chromium"?{args:["--no-sandbox"]}:{})});
 
 async function openPage({snapshot,organizer=false,width=1280,height=850,
-  roster=[],lineups={}}={}){
+  roster=[]}={}){
   const context=await browser.newContext({
     viewport:{width,height},deviceScaleFactor:width<500?2:1,
     isMobile:width<500,hasTouch:width<500
@@ -74,7 +74,7 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,
   const page=await context.newPage();
   const errors=[];
   page.on("pageerror",e=>errors.push(e.message));
-  await page.addInitScript(({snapshot,organizer,roster,lineups})=>{
+  await page.addInitScript(({snapshot,organizer,roster})=>{
     window.confirm=()=>true;
     window.TEAMS_MANAGER_STAGING_CONFIG={
       url:"https://invalid-for-browser-tests.example",
@@ -82,7 +82,6 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,
     };
     window.__teamsSnapshot=snapshot;
     window.__teamsRoster=roster;
-    window.__teamsLineups=lineups;
     window.__teamsCalls=[];
     let changedCallback,authCallback;
     let signedIn=organizer;
@@ -131,10 +130,6 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,
         if(name==="tm_org_roster"){
           return {data:structuredClone(window.__teamsRoster),error:null};
         }
-        if(name==="tm_public_game_lineup"){
-          return {data:structuredClone(window.__teamsLineups[args.p_game_id]||[]),
-            error:null};
-        }
         if(name==="tm_org_stats"||name==="tm_org_teammate_pairs"||
            name==="tm_org_transfers"||name==="tm_org_game_appearances"||
            name==="tm_public_game_subs"){
@@ -163,7 +158,7 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,
         return {data:null,error:null};
       }
     };
-  },{snapshot,organizer,roster,lineups});
+  },{snapshot,organizer,roster});
   await page.route("https://esm.sh/**",route=>route.fulfill({
     status:200,contentType:"text/javascript",
     headers:{"access-control-allow-origin":"*"},
@@ -197,6 +192,46 @@ async function verifyNoPageOverflow(page,label){
     assert(size?.height>=28,label+" has a tiny game-action touch target");
   }
 }
+async function verifyPositionDropdown(page) {
+  const row=page.locator('[data-player-row="registered"]');
+  const trigger=row.locator('.tm-position-trigger');
+  const menu=row.locator('[popover]');
+  const geometry=()=>row.evaluate(el=>{
+    const rect=el.getBoundingClientRect();
+    return [rect.height,el.nextElementSibling.getBoundingClientRect().top-rect.top];
+  });
+  await trigger.evaluate(el=>el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'}));
+  const before=await geometry();
+  assert(await menu.isHidden());
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await menu.waitFor();
+  assert.equal(await menu.locator("label").first().evaluate(el=>getComputedStyle(el).flexDirection),"row");
+  assert.deepEqual(await geometry(),before,"Opening the checkboxes resized or displaced a roster row");
+  const bounds=await menu.boundingBox();
+  const view=page.viewportSize();
+  assert(bounds.x>=0 && bounds.y>=0 && bounds.x+bounds.width<=view.width+1 && bounds.y+bounds.height<=view.height+1,
+    "Menu outside the viewport: "+JSON.stringify({bounds,view,placement:await menu.evaluate(el=>({
+      trigger:el.previousElementSibling.getBoundingClientRect().toJSON(),styles:el.style.cssText,
+      inner:[innerWidth,innerHeight], visual:[visualViewport.width,visualViewport.height,visualViewport.offsetTop,visualViewport.scale]
+    }))}));
+  await menu.getByLabel('Outside',{exact:true}).check();
+  await menu.getByLabel('Setter',{exact:true}).check();
+  assert(await menu.getByLabel('Libero',{exact:true}).isDisabled());
+  assert.deepEqual(await geometry(),before,"Selecting positions changed the roster layout");
+  await page.keyboard.press('Escape');
+  await menu.waitFor({state:'hidden'});
+  assert.equal(await trigger.evaluate(el=>el===document.activeElement),true);
+  await trigger.click();
+  await menu.getByLabel('Flex (all positions)',{exact:true}).check();
+  assert.equal(await menu.locator('input:checked').count(),1);
+  await menu.getByRole('button',{name:'Done'}).click();
+  await menu.waitFor({state:'hidden'});
+  await trigger.click();
+  await page.locator('#tm-roster-heading').click();
+  await menu.waitFor({state:'hidden'});
+}
+
 try {
   const mobile=await openPage({snapshot:sample(6),width:390,height:844});
   try{
@@ -220,44 +255,21 @@ try {
     console.log("PASS "+engine+" mobile 390px six-team game start/winner flow");
   }finally{await mobile.context.close();}
 
-  // A seven-person 6v6 roster shares an on-court spot: the seventh
-  // teammate enters mid-game and counts as regular participation, not
-  // a resting-team borrowed substitute.
-  const sharedRole=sample(4);
-  sharedRole.format=6;
-  sharedRole.games[0].status="playing";
-  sharedRole.teams[0].players=Array.from({length:7},(_,i)=>({
-    id:"middle-"+i,name:i===6?"Fictional Libero":"Fictional Middle "+i
-  }));
-  sharedRole.teams[1].players=Array.from({length:6},(_,i)=>({
-    id:"other-"+i,name:"Other teammate "+i
-  }));
-  const activeLineup=[
-    ...sharedRole.teams[0].players.slice(0,6).map(p=>({
-      player_id:p.id,name:p.name,team_id:"t1",is_substitute:false
-    })),
-    ...sharedRole.teams[1].players.map(p=>({
-      player_id:p.id,name:p.name,team_id:"t2",is_substitute:false
-    }))
-  ];
-  const seven=await openPage({snapshot:sharedRole,width:390,height:844,
-    lineups:{g1:activeLineup}});
+  const fullRoster=sample(4);
+  fullRoster.games[0].status="playing";
+  fullRoster.teams[0].players=Array.from({length:7},(_,i)=>({id:"p-"+i,name:"Player "+i}));
+  const seven=await openPage({snapshot:fullRoster,width:390,height:844});
   try{
     const page=seven.page;
-    await page.locator('[data-rotate-out="g1-t1"]').waitFor();
-    await verifyNoPageOverflow(page,"390px seven-player 6v6 lineup rotation");
-    await page.locator('[data-rotate-out="g1-t1"]').selectOption("middle-0");
-    await page.locator('[data-rotate-in="g1-t1"]').selectOption("middle-6");
-    await page.locator(
-      '[data-tm-game-action="rotate-teammate"][data-team-id="t1"]').click();
-    await page.waitForFunction(()=>
-      window.__teamsCalls.some(c=>c.name==="tm_public_rotate_teammate"));
-    const calls=await page.evaluate(()=>window.__teamsCalls);
-    assert(calls.some(c=>c.name==="tm_public_rotate_teammate"&&
-      c.args.p_out_player_id==="middle-0"&&
-      c.args.p_in_player_id==="middle-6"));
+    const game=page.locator(".tm-game.is-playing");
+    await game.getByRole("button",{name:"Report winner"}).waitFor();
+    assert.equal(await game.locator("button").count(),1);
+    assert.equal(await game.locator("select").count(),1);
+    assert.equal(await page.locator(".tm-team").first().locator("li").count(),7);
+    assert(!await page.evaluate(()=>window.__teamsCalls.some(c=>c.name==="tm_public_game_lineup")));
+    await verifyNoPageOverflow(page,"390px seven-player 6v6 game");
     assert.deepEqual(seven.errors,[]);
-    console.log("PASS "+engine+" mobile seven-player 6v6 regular in-game teammate rotation");
+    console.log("PASS "+engine+" mobile team-only game with seven players");
   }finally{await seven.context.close();}
 
   const five=await openPage({snapshot:{...sample(5),transferOptions:[{player_id:"p1",target_team_id:"t2"}]},width:390,height:844});
@@ -301,6 +313,7 @@ try {
     const page=desktop.page;
     await page.locator('[data-mark-no-show="registered"]').waitFor();
     await verifyNoPageOverflow(page,"Desktop organizer event attendance");
+    await verifyPositionDropdown(page);
     await page.locator('[data-mark-no-show="registered"]').click();
     await page.waitForFunction(()=>
       window.__teamsRoster.some(p=>p.id==="registered"&&p.attendance==="absent"));
@@ -328,15 +341,8 @@ try {
     const layout=await page.locator(".tm-attendance-table tbody").evaluate(el=>
       getComputedStyle(el).display);
     assert.equal(layout,"grid","Mobile attendance should use stacked cards");
-    const picker=page.locator('[data-player-row="registered"] [data-positions]');
-    await picker.locator('summary').click();
-    await picker.getByLabel("Outside",{exact:true}).check();
-    await picker.getByLabel("Setter",{exact:true}).check();
-    assert(await picker.getByLabel("Libero",{exact:true}).isDisabled());
-    await picker.getByLabel("Flex (all positions)",{exact:true}).check();
-    assert.equal(await picker.locator("input:checked").count(),1);
+    await verifyPositionDropdown(page);
     await verifyNoPageOverflow(page,"390px organizer position picker");
-    await picker.locator('summary').click();
     const action=await page.locator('[data-mark-no-show="registered"]').boundingBox();
     assert(action&&action.x>=0&&action.x+action.width<=392,
       "No-show action should fit within the mobile viewport without sideways scrolling");

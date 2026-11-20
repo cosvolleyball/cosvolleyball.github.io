@@ -23,7 +23,7 @@ For phone access, both devices use the same private network. The host must accep
 | Open **Organizer Login**, sign in and start **Public local synthetic game**. | The roster shows 25 available and one pending. The canceled player is absent. |
 | Mark a registered player as a no-show, restore that player with **Include**, then mark the no-show again and add a fictional walk-in. | The available count returns to 25. The waitlisted player stays pending. |
 | Generate four 6v6 teams. Try an opening-slot swap and undo it, save privately, then publish. | Sizes are 7, 6, 6 and 6. The player view shows the teams after publication. |
-| Start both opening games. Rotate the extra teammate into the seven-player team's game and report its winner. | The organizer sees the result. Returning to the player tab after backgrounding the browser restores the current game state. |
+| Start both opening games and report a win for the seven-player team. | The organizer sees a regular game and a win for all seven players. Returning to the player tab after backgrounding the browser restores the current game state. |
 | End the rotation early and publish six 4v4 teams. Then end the session. | Sizes are 5, 4, 4, 4, 4 and 4. The public view returns to idle and the organizer sees completed-game totals. |
 
 [Event-day controls and rotation rules](../../TEAM_MANAGER_DESIGN.md) · [Automated test coverage](../../TEAM_MANAGER_STAGING_PLAN.md)

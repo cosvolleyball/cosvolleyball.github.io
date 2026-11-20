@@ -115,21 +115,6 @@ function gameControls(g, teams, session) {
     </div>`;
   }
   if (g.status === "playing") {
-    const resting=teams.length===6
-      ? teams.find(t=>t.court===g.court &&
-          t.id!==g.team_a_id && t.id!==g.team_b_id)
-      : null;
-    const activeLineup=session.liveLineups?.[g.id]||[];
-    const ordinaryRotations=[g.team_a_id,g.team_b_id].flatMap(id=>{
-      const team=teams.find(t=>t.id===id);
-      if(!team)return [];
-      const current=activeLineup.filter(p=>p.team_id===id&&!p.is_substitute);
-      const sitting=(team.players||[]).filter(p=>
-        !activeLineup.some(l=>l.player_id===p.id));
-      return current.length&&sitting.length ? [{
-        team,current,sitting
-      }] : [];
-    });
     return `<div class="tm-game-actions">
       <label>Winner<select id="report-winner-${escapeHtml(g.id)}" data-report-winner="${escapeHtml(g.id)}">
         <option value="">Select winner…</option>
@@ -138,45 +123,6 @@ function gameControls(g, teams, session) {
       </select></label>
       <button type="button" class="tm-button"
         data-tm-game-action="winner" data-game-id="${escapeHtml(g.id)}">Report winner</button>
-      ${ordinaryRotations.map(option=>`<div class="tm-sub-form">
-        <strong>${escapeHtml(option.team.label)} — rotate a teammate into this game</strong>
-        <label>Player leaving court<select id="rotate-out-${escapeHtml(g.id)}-${escapeHtml(option.team.id)}" data-rotate-out="${escapeHtml(g.id)}-${escapeHtml(option.team.id)}">
-          <option value="">Choose player…</option>
-          ${option.current.map(p=>`<option value="${escapeHtml(p.player_id)}">${escapeHtml(p.name)}</option>`).join("")}
-        </select></label>
-        <label>Teammate entering<select id="rotate-in-${escapeHtml(g.id)}-${escapeHtml(option.team.id)}" data-rotate-in="${escapeHtml(g.id)}-${escapeHtml(option.team.id)}">
-          <option value="">Choose player…</option>
-          ${option.sitting.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
-        </select></label>
-        <button type="button" class="tm-button tm-secondary"
-          data-tm-game-action="rotate-teammate" data-game-id="${escapeHtml(g.id)}"
-          data-team-id="${escapeHtml(option.team.id)}">
-          Record teammate rotation
-        </button>
-      </div>`).join("")}
-      ${resting && activeLineup.length ? `<div class="tm-sub-form">
-        <strong>Emergency injury substitution (six-team games only)</strong>
-        <label>Player leaving court
-          <select id="emergency-out-${escapeHtml(g.id)}" data-emergency-out="${escapeHtml(g.id)}">
-          <option value="">Choose outgoing player…</option>
-          ${activeLineup.map(p=>`<option value="${escapeHtml(p.player_id)}">
-            ${escapeHtml(p.name)} (${escapeHtml(teamName(teams,p.team_id))})
-          </option>`).join("")}
-          </select>
-        </label>
-        <label>Replacement from ${escapeHtml(resting.label)}
-          <select id="emergency-in-${escapeHtml(g.id)}" data-emergency-in="${escapeHtml(g.id)}">
-            <option value="">Choose replacement…</option>
-            ${(resting.players||[]).filter(p=>
-              !activeLineup.some(a=>a.player_id===p.id)).map(p=>
-              `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
-          </select>
-        </label>
-        <button type="button" class="tm-button tm-secondary"
-          data-tm-game-action="emergency" data-game-id="${escapeHtml(g.id)}">
-          Record emergency substitution
-        </button>
-      </div>` : ""}
     </div>`;
   }
   if (g.status === "completed" && state.isOrganizer) {
@@ -353,14 +299,55 @@ function positionPicker(player) {
   const isFlex = selected.includes("flex");
   const shown = isFlex ? ["flex"] : positionChoices.filter(p=>selected.includes(p));
   const previous = saved.filter(p => !positionChoices.includes(normalizedPosition(p)));
-  return `<details class="tm-position-picker" data-positions>
-    <summary><span class="tm-sr-only">Preferred positions for ${escapeHtml(player.name)}, </span><span data-position-summary>${escapeHtml([...shown.map(titleCase), ...previous].join(", ") || "Choose positions")}</span></summary>
-    <fieldset><legend>Choose up to two positions</legend>
-      ${positionChoices.map(value => `<label><input type="checkbox" data-position value="${value}"${shown.includes(value) ? " checked" : ""}${shown.length === 2 && value !== "flex" && !shown.includes(value) ? " disabled" : ""}>${value === "flex" ? "Flex (all positions)" : titleCase(value)}</label>`).join("")}
-    </fieldset>
-    ${previous.length ? `<small>Previous entries: ${escapeHtml(previous.join(", "))}</small><button type="button" data-clear-positions>Clear positions</button>` : ""}
-  </details>`;
+  const menuId = "positions-" + escapeHtml(player.id);
+  return `<div class="tm-position-picker" data-positions>
+    <button type="button" class="tm-position-trigger" popovertarget="${menuId}">
+      <span class="tm-sr-only">Preferred positions for ${escapeHtml(player.name)}, </span>
+      <span data-position-summary>${escapeHtml([...shown.map(titleCase), ...previous].join(", ") || "Choose positions")}</span>
+    </button>
+    <div class="tm-position-menu" popover="auto" id="${menuId}">
+      <fieldset><legend>Choose up to two positions</legend>
+        ${positionChoices.map(value => `<label><input type="checkbox" data-position value="${value}"${shown.includes(value) ? " checked" : ""}${shown.length === 2 && value !== "flex" && !shown.includes(value) ? " disabled" : ""}>${value === "flex" ? "Flex (all positions)" : titleCase(value)}</label>`).join("")}
+      </fieldset>
+      ${previous.length ? `<small>Previous entries: ${escapeHtml(previous.join(", "))}</small><button type="button" data-clear-positions>Clear positions</button>` : ""}
+      <button type="button" class="tm-button tm-secondary" popovertarget="${menuId}" popovertargetaction="hide">Done</button>
+    </div>
+  </div>`;
 }
+
+// A native popover floats above the scrolling roster. Anchor it to its own
+// button and use the space above when there is little room below.
+let openPositionMenu = null;
+function placePositionMenu() {
+  const menu = openPositionMenu;
+  if (!menu?.isConnected) { openPositionMenu = null; return; }
+  const anchor = menu.previousElementSibling.getBoundingClientRect();
+  const viewport = document.documentElement;
+  const gap = 4, margin = 8;
+  const height = viewport.clientHeight;
+  const top = Math.max(margin, Math.min(anchor.bottom + gap, height - margin));
+  const bottom = Math.max(margin, Math.min(height - anchor.top + gap, height - margin));
+  const below = height - top - margin;
+  const above = height - bottom - margin;
+  const opensUp = below < 350 && above > below;
+  const width = Math.min(Math.max(232, anchor.width), viewport.clientWidth - margin * 2);
+  menu.style.width = width + "px";
+  menu.style.left = Math.max(margin, Math.min(anchor.left, viewport.clientWidth - width - margin)) + "px";
+  menu.style.top = opensUp ? "auto" : top + "px";
+  menu.style.bottom = opensUp ? bottom + "px" : "auto";
+  menu.style.maxHeight = Math.max(0, opensUp ? above : below) + "px";
+}
+$("tm-roster").addEventListener("beforetoggle", event => {
+  if (!event.target.matches(".tm-position-menu")) return;
+  if (event.newState === "open") {
+    openPositionMenu = event.target;
+    placePositionMenu();
+  } else if (openPositionMenu === event.target) openPositionMenu = null;
+}, true);
+document.addEventListener("scroll", event => {
+  if (openPositionMenu && !openPositionMenu.contains(event.target)) placePositionMenu();
+}, true);
+window.addEventListener("resize", placePositionMenu);
 
 function updatePositionPicker(picker, changed) {
   picker.dataset.edited = "true";
@@ -661,8 +648,7 @@ async function loadCorrectionGame() {
 function renderAppearanceCorrection() {
   const panel=$("tm-appearance-correction");
   const snapshot=state.snapshot;
-  const matches=(snapshot?.games||[]).filter(g=>
-    ["playing","completed"].includes(g.status));
+  const matches=(snapshot?.games||[]).filter(g=>g.status==="completed");
   const visible=Boolean(snapshot?.active&&state.isOrganizer&&matches.length);
   panel.hidden=!visible;
   if(!visible){
@@ -880,7 +866,6 @@ async function refresh(forcePrivate = false) {
     const snapshot = await rpc("tm_public_snapshot");
     if (snapshot?.active && snapshot.rotation_status === "published") {
       const ready = (snapshot.games||[]).filter(g=>g.status==="ready");
-      const playing = (snapshot.games||[]).filter(g=>g.status==="playing");
       if (snapshot.teams?.length === 5) {
         snapshot.transferOptions = await rpc("tm_public_transfer_options", {p_rotation_id:snapshot.rotation_id});
       }
@@ -892,12 +877,6 @@ async function refresh(forcePrivate = false) {
           rows.map(row=>[row.id,Array.isArray(row.subs)?row.subs:[]])
         );
       }
-      const lineups = await Promise.all(playing.map(async g=>({
-        id:g.id,players:await rpc("tm_public_game_lineup",{p_game_id:g.id})
-      })));
-      snapshot.liveLineups=Object.fromEntries(
-        lineups.map(row=>[row.id,Array.isArray(row.players)?row.players:[]])
-      );
     }
     // Avoid resetting a user's form selections on every automatic poll.
     const before = state.snapshot;
@@ -1032,31 +1011,6 @@ $("tm-public-content").addEventListener("click",e=>{
         p_game_id:gameId,p_session_player_id:player
       });
       feedback("Planned substitute removed.");
-    }else if(name==="rotate-teammate"){
-      if(!game || game.status!=="playing")
-        throw new Error("Game is not in progress.");
-      const identifier=gameId+"-"+btn.dataset.teamId;
-      const outgoing=document.querySelector('[data-rotate-out="'+identifier+'"]')?.value;
-      const incoming=document.querySelector('[data-rotate-in="'+identifier+'"]')?.value;
-      if(!outgoing||!incoming)
-        throw new Error("Choose the player leaving and teammate entering.");
-      if(!window.confirm("Record a regular in-game teammate rotation? Both players count as having participated."))return;
-      await rpc("tm_public_rotate_teammate",{
-        p_game_id:gameId,p_out_player_id:outgoing,p_in_player_id:incoming
-      });
-      feedback("Teammate rotation recorded as regular game participation.");
-    }else if(name==="emergency"){
-      if(!game || game.status!=="playing")
-        throw new Error("Game is no longer in progress.");
-      const outgoing=document.querySelector('[data-emergency-out="'+gameId+'"]')?.value;
-      const incoming=document.querySelector('[data-emergency-in="'+gameId+'"]')?.value;
-      if(!outgoing||!incoming)
-        throw new Error("Choose the injured player and an available resting-team substitute.");
-      if(!window.confirm("Record an emergency in-game substitution? The injured player's game appearance will still count."))return;
-      await rpc("tm_public_emergency_sub",{
-        p_game_id:gameId,p_out_player_id:outgoing,p_in_player_id:incoming
-      });
-      feedback("Emergency substitution recorded; both player appearances are tracked.");
     }else if(name==="transfer"){
       if(state.snapshot?.teams?.length!==5 ||
           state.snapshot.rotation_status!=="published")
