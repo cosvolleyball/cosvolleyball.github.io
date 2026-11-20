@@ -1,5 +1,5 @@
 /**
- * Real Chromium smoke tests for the feature-branch Teams Manager page.
+ * Chromium and WebKit smoke tests for the feature-branch Teams Manager page.
  * Entirely mocked network: NO Supabase project (hosted or local) contacted.
  * Checks mobile public interactions, five-team rules and organizer roster UX.
  */
@@ -179,7 +179,13 @@ async function verifyNoPageOverflow(page,label){
   const dims=await page.evaluate(()=>({
     viewport:window.innerWidth,
     page:document.documentElement.scrollWidth,
-    body:document.body.scrollWidth
+    body:document.body.scrollWidth,
+    overflowing:[...document.querySelectorAll("body *")].filter(el=>
+      el.getBoundingClientRect().right>window.innerWidth+2 &&
+      !el.closest(".tm-roster")).slice(0,8).map(el=>({
+        tag:el.tagName, id:el.id, className:el.className,
+        right:Math.round(el.getBoundingClientRect().right)
+      }))
   }));
   assert(dims.page<=dims.viewport+2,
     label+" causes horizontal viewport overflow: "+JSON.stringify(dims));

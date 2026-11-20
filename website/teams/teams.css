@@ -176,7 +176,25 @@
   white-space: nowrap; border: 0;
 }
 @media (max-width: 640px) {
+  .site-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .25rem .75rem;
+  }
+  .site-nav > a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    white-space: normal;
+    text-align: center;
+  }
   .tm-page { padding: 1rem .75rem 3rem; }
+  .tm-courts, .tm-team-grid, .tm-sub-form, .tm-game-actions, .tm-form:not(.tm-inline) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tm-game-actions label, .tm-game-actions select, .tm-transfer label,
+  .tm-transfer select, .tm-form label, .tm-court, .tm-team { min-width: 0; }
   .tm-heading h1 { font-size: 2.5rem; }
   .tm-panel,.tm-court { padding: 1rem; }
   .tm-form.tm-inline { display: grid; }
