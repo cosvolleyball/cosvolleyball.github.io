@@ -162,7 +162,8 @@ begin
   where r.id=p_rotation_id and r.status='published'
     and s.status='active'
   for update of s;
-  if not found then
+  if not found or not exists(select 1 from public.tm_rotations
+    where id=p_rotation_id and status='published') then
     raise exception 'Transfer is outside an active published rotation'
       using errcode='22023';
   end if;
@@ -269,7 +270,8 @@ begin
   join public.tm_sessions s on s.id=r.session_id
   where r.id=p_rotation_id and r.status='published'
     and s.status='active' for update of s;
-  if not found then
+  if not found or not exists(select 1 from public.tm_rotations
+    where id=p_rotation_id and status='published') then
     raise exception 'Rotation is no longer active' using errcode='22023';
   end if;
   select playing_format into v_format from public.tm_rotations

@@ -25,6 +25,11 @@ const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, c => ({
 }[c]));
 const state = {
   isOrganizer: false,
+  organizerUserId: null,
+  authEpoch: 0,
+  retryOrganizerCheck: false,
+  publicNeedsRender: false,
+  organizerCheckId: 0,
   snapshot: null,
   roster: [],
   stats: [],
@@ -245,10 +250,15 @@ function renderPublic() {
           .includes(g.status) ? g.status : "scheduled";
         const left = teamName(teams,g.team_a_id);
         const right = teamName(teams,g.team_b_id);
+        // Five-team matches can be ready on this court but still depend on
+        // a result or a team from the other court finishing an earlier game.
+        const waitingAcrossCourts = teams.length===5 && g.status==="scheduled" && g.round>1
+          && courtGames.filter(previous=>previous.round<g.round).every(previous=>previous.status==="completed");
         const result = g.status === "completed"
           ? "Winner: " + teamName(teams,g.winner_team_id)
           : g.status === "playing" ? "Game in progress"
           : g.status === "abandoned" ? "Not completed"
+          : waitingAcrossCourts ? "Waiting for other court"
           : !g.team_a_id || !g.team_b_id ? "Waiting for opening result"
           : "Upcoming";
         return `<div class="tm-game is-${statusValue}">
@@ -277,9 +287,10 @@ function renderPublic() {
 function formatStats(stats) {
   if (!Array.isArray(stats) || !stats.length) return '<p class="tm-muted">No participation recorded.</p>';
   return `<div class="tm-roster"><table class="tm-stats-table">
-    <thead><tr><th>Player</th><th>Regular games</th><th>Sub games</th><th>Wins</th></tr></thead>
+    <thead><tr><th>Player</th><th>Rotations played</th><th>Regular games</th><th>Sub games</th><th>Wins</th></tr></thead>
     <tbody>${stats.map(p=>`<tr>
       <td>${escapeHtml(p.name)}</td>
+      <td>${Number(p.rotations)||0}</td>
       <td>${Number(p.regular_games)||0}</td>
       <td>${Number(p.sub_games)||0}</td>
       <td>${Number(p.wins)||0}</td>
@@ -331,6 +342,13 @@ function invalidateSavedDraft() {
   $("tm-publish").disabled = true;
   $("tm-save-draft").disabled = !state.draft;
 }
+function openingSlot(seed, teamCount) {
+  if (teamCount === 4) return seed <= 2 ? "Court 1" : "Court 2";
+  if (seed === 3) return teamCount === 6 ? "Rest on Court 1" : "Rest";
+  if (seed === 6) return "Rest on Court 2";
+  return seed <= 2 ? "Court 1" : "Court 2";
+}
+
 function renderDraft() {
   const host = $("tm-draft");
   const teams = currentDraftTeams();
@@ -350,6 +368,15 @@ function renderDraft() {
     <div class="tm-team-grid">
     ${teams.map((team,teamIndex)=>`<article class="tm-team">
       <h4>Team ${team.seed} <small>(${team.playerIds.length} players)</small></h4>
+      <div class="tm-edit-row">
+        <span>Opening round · ${openingSlot(team.seed,teams.length)}</span>
+        <label class="tm-sr-only" for="slot-${team.seed}">Swap opening slot for Team ${team.seed}</label>
+        <select id="slot-${team.seed}"><option value="">Swap slots with…</option>
+          ${teams.filter(t=>t.seed!==team.seed).map(t=>
+            `<option value="${t.seed}">Team ${t.seed} · ${openingSlot(t.seed,teams.length)}</option>`).join("")}
+        </select>
+        <button type="button" class="tm-button tm-secondary" data-swap-slot="${team.seed}">Swap team slots</button>
+      </div>
       ${team.playerIds.length>state.draft.playingFormat
         ? `<p class="tm-muted">Extra roster player(s) can rotate into games.
           ${(state.draft.sharedRolePairs||[]).filter(p=>p.seed===team.seed).map(p=>
@@ -515,13 +542,14 @@ function updateCorrectionCandidateOptions() {
     choices.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
 }
 async function loadCorrectionGame() {
+  const epoch=state.authEpoch,session=state.snapshot?.session_id;
   const id=$("tm-correct-game").value;
   $("tm-incorrect-player").innerHTML='<option value="">Choose recorded player…</option>';
   $("tm-correct-player").innerHTML='<option value="">Choose replacement…</option>';
   state.correctionAppearances=[];
   if(!id)return;
   const current=await rpc("tm_org_game_appearances",{p_game_id:id});
-  if($("tm-correct-game").value!==id)return;
+  if(!privateRequestIsCurrent(epoch,session) || $("tm-correct-game").value!==id)return;
   state.correctionAppearances=Array.isArray(current)?current:[];
   $("tm-incorrect-player").innerHTML='<option value="">Choose recorded player…</option>'+
     state.correctionAppearances.map(p=>`<option value="${escapeHtml(p.player_id)}">
@@ -664,8 +692,40 @@ function renderOrganizer() {
   renderAppearanceCorrection();
   renderTransferCorrection();
 }
+// Forget private data immediately on logout, lost access or page caching.
+// The epoch also invalidates requests that were already in flight.
+function clearOrganizer(retryAfterNetworkError = false) {
+  state.retryOrganizerCheck = retryAfterNetworkError;
+  state.authEpoch++;
+  state.organizerCheckId++;
+  state.isOrganizer=false;
+  state.organizerUserId=null;
+  for(const key of ["roster","stats","priorTeammates","transferHistory",
+    "events","undoStack","correctionAppearances"])state[key]=[];
+  for(const key of ["draft","savedDraftId","lastPrivateRevision",
+    "lastPrivateSessionId","adjustRenderKey","appearanceRenderKey","choicesKey"])
+    state[key]=null;
+  $("tm-organizer").hidden=true;
+  $("tm-final-stats").hidden=true;
+  for(const id of ["tm-roster","tm-roster-count","tm-draft","tm-stats",
+    "tm-final-stats-body"])$(id).replaceChildren();
+  for(const id of ["tm-source-event","tm-arrival-player","tm-arrival-team",
+    "tm-replace-player","tm-transfer-correction-player","tm-transfer-correction-team",
+    "tm-correct-game","tm-incorrect-player","tm-correct-player"])
+    $(id).replaceChildren(new Option("Choose…",""));
+  $("tm-walkin-form").reset();
+  $("tm-feedback").hidden=true;
+  $("tm-feedback").textContent="";
+  // Public cards may contain organizer-only correction controls.
+  if(state.snapshot)renderPublic();
+}
+function privateRequestIsCurrent(epoch,session) {
+  return state.isOrganizer && state.authEpoch===epoch &&
+    state.snapshot?.session_id===session;
+}
 async function loadPrivate() {
   const session=state.snapshot?.session_id;
+  const epoch=state.authEpoch;
   if(!session || !state.isOrganizer)return;
   const [roster,stats,remote,pairs,transfers] = await Promise.all([
     rpc("tm_org_roster",{p_session_id:session}),
@@ -677,6 +737,12 @@ async function loadPrivate() {
       ? rpc("tm_org_transfers",{p_rotation_id:state.snapshot.rotation_id})
       : Promise.resolve([])
   ]);
+  if(!privateRequestIsCurrent(epoch,session))return;
+  if(state.lastPrivateSessionId!==session){
+    $("tm-final-stats").hidden=true;
+    $("tm-final-stats-body").replaceChildren();
+    state.draft=null;state.savedDraftId=null;state.undoStack=[];
+  }
   state.roster=Array.isArray(roster)?roster:[];
   state.stats=Array.isArray(stats)?stats:[];
   state.priorTeammates=Array.isArray(pairs)?pairs:[];
@@ -702,6 +768,7 @@ async function refresh(forcePrivate = false) {
   }
   state.refreshing=true;
   try {
+    if(state.isOrganizer || state.retryOrganizerCheck)await checkOrganizer();
     const snapshot = await rpc("tm_public_snapshot");
     if (snapshot?.active && snapshot.rotation_status === "published") {
       const ready = (snapshot.games||[]).filter(g=>g.status==="ready");
@@ -728,16 +795,22 @@ async function refresh(forcePrivate = false) {
       before.rotation_id !== snapshot?.rotation_id ||
       before.revision !== snapshot?.revision;
     state.snapshot = snapshot;
-    if(changes)renderPublic();
+    if(changes || state.publicNeedsRender){
+      renderPublic();
+      state.publicNeedsRender=false;
+    }
     if(state.isOrganizer){
       if(snapshot?.active && (forcePrivate ||
          state.lastPrivateRevision!==snapshot.revision ||
          state.lastPrivateSessionId!==snapshot.session_id)){
         await loadPrivate();
+      }else if(changes || forcePrivate){
+        renderOrganizer();
       }
-      renderOrganizer();
     }
   } catch(err) {
+    if(state.isOrganizer)clearOrganizer(true);
+    state.publicNeedsRender=true;
     console.error("Teams Manager data refresh failed",err);
     $("tm-status").textContent="Unavailable";
     $("tm-status").className="tm-status is-offline";
@@ -754,19 +827,37 @@ async function refresh(forcePrivate = false) {
   }
 }
 async function checkOrganizer() {
-  const {data,error}=await supabase.auth.getUser();
-  if(error || !data?.user)return;
-  const {data:row,error:roleError}=await supabase.from("organizers")
-    .select("user_id").eq("user_id",data.user.id).maybeSingle();
-  if(roleError || !row)return;
-  state.isOrganizer=true;
-  $("tm-organizer").hidden=false;
-  const {data:events,error:eventError}=await supabase.from("events")
-    .select("id,title,starts_at,status,visibility")
-    .eq("status","published").order("starts_at",{ascending:false});
-  if(eventError){feedback("Unable to load organizer events.",true);return;}
-  state.events=events||[];
-  renderEventPicker();
+  const epoch=state.authEpoch;
+  const checkId=++state.organizerCheckId;
+  const current=()=>epoch===state.authEpoch && checkId===state.organizerCheckId;
+  try {
+    const {data,error}=await supabase.auth.getUser();
+    if(!current())return;
+    if(error || !data?.user){
+      clearOrganizer(Boolean(error && error.name !== "AuthSessionMissingError"));
+      return;
+    }
+    const {data:row,error:roleError}=await supabase.from("organizers")
+      .select("user_id").eq("user_id",data.user.id).maybeSingle();
+    if(!current())return;
+    if(roleError || !row){clearOrganizer(Boolean(roleError));return;}
+    state.retryOrganizerCheck=false;
+    if(state.isOrganizer && state.organizerUserId===data.user.id)return;
+    const {data:events,error:eventError}=await supabase.from("events")
+      .select("id,title,starts_at,status,visibility")
+      .eq("status","published").order("starts_at",{ascending:false});
+    if(!current())return;
+    if(eventError){clearOrganizer(true);feedback("Unable to load organizer events.",true);return;}
+    state.isOrganizer=true;
+    state.organizerUserId=data.user.id;
+    state.events=events||[];
+    $("tm-organizer").hidden=false;
+    renderEventPicker();
+    if(state.snapshot)renderPublic();
+  } catch(error) {
+    if(current())clearOrganizer(true);
+    throw error;
+  }
 }
 
 // Anonymous player operations never require an account; every RPC enforces
@@ -900,7 +991,7 @@ $("tm-start-form").addEventListener("submit",e=>{e.preventDefault();void action(
     p_balance_positions:format!==4&&$("tm-balance-positions").checked
   });
   state.draft=null;state.savedDraftId=null;state.undoStack=[];
-  feedback("Session started. Check in the players who are actually present.");
+  feedback("Session started. Registered players are included; mark no-shows and add arrivals.");
   await refresh(true);
 });});
 $("tm-walkin-form").addEventListener("submit",e=>{e.preventDefault();void action(async()=>{
@@ -1030,9 +1121,21 @@ $("tm-generate").addEventListener("click",()=>void action(async()=>{
 $("tm-draft").addEventListener("click",e=>{
   const swap=e.target.closest("[data-swap-player]");
   const move=e.target.closest("[data-move-player]");
-  if(!swap&&!move)return;
+  const slot=e.target.closest("[data-swap-slot]");
+  if(!swap&&!move&&!slot)return;
   void action(async()=>{
-    if(swap){
+    if(slot){
+      const seed=Number(slot.dataset.swapSlot);
+      const other=Number($("slot-"+seed).value);
+      const teams=currentDraftTeams();
+      const from=teams.find(t=>t.seed===seed);
+      const to=teams.find(t=>t.seed===other);
+      if(!from||!to||from===to)throw new Error("Choose another team's opening slot.");
+      rememberEdit();
+      [from.playerIds,to.playerIds]=[to.playerIds,from.playerIds];
+      scoreCurrentDraft();
+      renderDraft();
+    } else if(swap){
       const id=swap.dataset.swapPlayer;
       editDraft("swap",id,
         $("swap-"+id).value);
@@ -1055,7 +1158,8 @@ $("tm-save-draft").addEventListener("click",()=>void action(async()=>{
   if(Number($("tm-team-count").value)!==state.draft.teams.length ||
       Number($("tm-draft-format").value)!==state.draft.playingFormat)
     throw new Error("Choices changed. Generate a new preview before saving.");
-  state.savedDraftId=await rpc("tm_org_save_draft",{
+  const epoch=state.authEpoch,session=state.snapshot.session_id;
+  const savedId=await rpc("tm_org_save_draft",{
     p_session_id:state.snapshot.session_id,
     p_expected_revision:state.snapshot.revision,
     p_teams:{
@@ -1063,6 +1167,8 @@ $("tm-save-draft").addEventListener("click",()=>void action(async()=>{
       teams:state.draft.teams
     }
   });
+  if(!privateRequestIsCurrent(epoch,session))return;
+  state.savedDraftId=savedId;
   feedback("Draft saved privately. Only publishing makes teams visible.");
   await refresh(true);
   renderDraft();
@@ -1094,8 +1200,15 @@ $("tm-end-rotation").addEventListener("click",()=>void action(async()=>{
 }));
 $("tm-end-session").addEventListener("click",()=>void action(async()=>{
   if(!window.confirm("End this entire volleyball session? This will close the public Teams Manager."))return;
-  const stats=await rpc("tm_org_stats",{p_session_id:state.snapshot.session_id});
-  await rpc("tm_org_end_session",{p_session_id:state.snapshot.session_id});
+  const session=state.snapshot.session_id,epoch=state.authEpoch;
+  await rpc("tm_org_end_session",{p_session_id:session});
+  // Read after closure so the last accepted game result is included. A
+  // realtime notification may already have switched the public view to idle.
+  const mayShowSummary=()=>state.isOrganizer && state.authEpoch===epoch &&
+    (!state.snapshot?.active || state.snapshot.session_id===session);
+  if(!mayShowSummary())return;
+  const stats=await rpc("tm_org_stats",{p_session_id:session});
+  if(!mayShowSummary())return;
   $("tm-final-stats-body").innerHTML=formatStats(stats);
   $("tm-final-stats").hidden=false;
   state.draft=null;state.savedDraftId=null;state.undoStack=[];
@@ -1146,6 +1259,16 @@ function connectRealtime() {
     return;
   }
   try {
+    supabase.auth.onAuthStateChange?.((event,session)=>{
+      if(event==="SIGNED_OUT" || !session?.user ||
+         (state.organizerUserId && state.organizerUserId!==session.user.id))
+        clearOrganizer();
+      // Supabase auth callbacks must not await another auth operation.
+      if(session?.user)setTimeout(()=>void action(async()=>{
+        await checkOrganizer();
+        await refresh(true);
+      }),0);
+    });
     await checkOrganizer();
     await refresh(true);
     connectRealtime();
@@ -1158,10 +1281,22 @@ function connectRealtime() {
 // must never leave the court schedule stale indefinitely.
 setInterval(()=>{if(supabase&&!document.hidden)void refresh();},8000);
 document.addEventListener("visibilitychange",()=>{
-  if(supabase&&!document.hidden)void refresh();
+  if(supabase&&!document.hidden)void action(async()=>{
+    await checkOrganizer();
+    await refresh(true);
+  });
+});
+window.addEventListener("pageshow",event=>{
+  if(supabase&&event.persisted)void action(async()=>{
+    await checkOrganizer();
+    await refresh(true);
+    if(!publicChangesChannel)connectRealtime();
+  });
 });
 window.addEventListener("pagehide",()=>{
+  clearOrganizer();
   if(realtimeRefreshTimer!==null)clearTimeout(realtimeRefreshTimer);
   realtimeRefreshTimer=null;
   if(publicChangesChannel)void supabase.removeChannel(publicChangesChannel);
+  publicChangesChannel=null;
 });

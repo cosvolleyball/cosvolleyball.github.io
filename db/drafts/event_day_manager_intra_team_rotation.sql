@@ -34,7 +34,13 @@ begin
     raise exception 'Choose two different teammates'
       using errcode='22023';
   end if;
-  select * into v_game from public.tm_games where id=p_game_id;
+  select g.* into v_game from public.tm_games g
+  join public.tm_rotations r on r.id=g.rotation_id
+  where g.id=p_game_id and g.status='playing' and r.status='published';
+  if not found then
+    raise exception 'Within-team rotation requires a live game'
+      using errcode='22023';
+  end if;
   select a.team_id into v_out_team from public.tm_game_appearances a
     where a.game_id=p_game_id and a.session_player_id=p_out_player_id
       and a.active_on_court and not a.is_substitute;

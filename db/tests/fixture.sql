@@ -27,12 +27,13 @@ create table public.organizers (user_id uuid primary key references auth.users(i
 create table public.events (
   id uuid primary key default gen_random_uuid(),
   title text not null,
+  starts_at timestamptz not null default now(),
   status text not null,
   visibility text not null default 'public'
 );
 create table public.registrations (
   id uuid primary key default gen_random_uuid(),
-  event_id uuid not null references public.events(id) on delete cascade,
+  event_id uuid not null references public.events(id) on delete restrict,
   player_name text not null,
   player_email text not null,
   registration_status text not null,

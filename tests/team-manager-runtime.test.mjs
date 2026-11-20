@@ -13,7 +13,7 @@ const optionsCode=fs.readFileSync(path.join(root,"rotation-options.mjs"),"utf8")
 
 async function boot({initialSnapshot,organizer=false,organizerRoster=[],
   lineupByGame={},organizerAppearances={},transferHistory=[],
-  staging=true}={}){
+  staging=true,rpcOverride=null}={}){
   const dom=new JSDOM(page,{
     url:"https://test.local/teams/",
     runScripts:"outside-only",
@@ -25,6 +25,7 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
     url:"https://staging.example.supabase.co",publishableKey:"sb_publishable_test_only"
   };
   let snapshot=initialSnapshot||{active:false};
+  let signedIn=organizer,allowed=organizer,authCallback=null;
   let broadcastListener=null;
   let subscribed=false;
   const channel={
@@ -46,13 +47,14 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
     },
     removeChannel:async()=>{},
     auth:{
-      getUser:async()=>({data:{user:organizer?{id:"organizer-id"}:null}})
+      getUser:async()=>({data:{user:signedIn?{id:"organizer-id"}:null}}),
+      onAuthStateChange(callback){authCallback=callback;return {data:{subscription:{unsubscribe(){}}}};}
     },
     from(table){
       return {
         select:()=>({
           eq:()=>({
-            maybeSingle:async()=>({data:table==="organizers"?{user_id:"organizer-id"}:null}),
+            maybeSingle:async()=>({data:table==="organizers"&&allowed?{user_id:"organizer-id"}:null}),
             order:async()=>({data:table==="events"?[{
               id:"a-event",title:"Example session",status:"published",
               starts_at:"2026-11-16T22:00:00Z",visibility:"public"
@@ -63,6 +65,7 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
     },
     rpc:async(name,args)=>{
       calls.push({name,args});
+      if(rpcOverride){const result=await rpcOverride(name,args);if(result!==undefined)return result;}
       if(name==="tm_public_snapshot")return {data:snapshot,error:null};
       if(name==="tm_org_set_attendance"){
         const player=organizerRoster.find(p=>p.id===args?.p_session_player_id);
@@ -91,6 +94,8 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
   return {
     dom,calls,errs,
     setSnapshot(value){snapshot=value;},
+    signOut(){signedIn=false;authCallback?.("SIGNED_OUT",null);},
+    revokeRole(){allowed=false;},
     refresh:()=>dom.window.__tm.refresh(),
     emitBroadcast:()=>broadcastListener?.({payload:{revision:42,active:true}}),
     isSubscribed:()=>subscribed,
@@ -562,5 +567,86 @@ test("waitlisted player can be included without altering official registration",
       "Manager must never write to event registrations");
     assert.equal(doc.querySelector("#tm-roster-count").textContent,
       "1 available · 0 no-shows · 0 pending");
+  }finally{t.close();}
+});
+
+const privateRosterFixture=[{id:"private-player",profile_id:"private-profile",
+  name:"Private Player",email:"sensitive@example.invalid",skill:8,
+  gender:"private",positions:[],attendance:"present",source_status:"registered"}];
+const activePrivateSession={active:true,session_id:"private-session",revision:1,
+  format:6,rotation_id:null,rotation_status:null,teams:[],games:[]};
+
+test("logout clears private roster, event choices and cached statistics immediately",async()=>{
+  const t=await boot({organizer:true,initialSnapshot:activePrivateSession,
+    organizerRoster:privateRosterFixture});
+  try{
+    const doc=t.dom.window.document;
+    assert.match(doc.querySelector("#tm-roster").innerHTML,/Private Player/);
+    doc.querySelector("#tm-final-stats-body").textContent="Sensitive stats";
+    t.signOut();
+    assert(doc.querySelector("#tm-organizer").hidden);
+    assert(!doc.querySelector("#tm-organizer").innerHTML.includes("Private Player"));
+    assert.equal(doc.querySelector("#tm-final-stats-body").textContent,"");
+    assert(!doc.querySelector("#tm-source-event").textContent.includes("Example session"));
+    await t.refresh();
+    assert.equal(doc.querySelector("#tm-roster").textContent,"");
+  }finally{t.close();}
+});
+
+test("logout discards a private roster response already in flight",async()=>{
+  let release,hold=false;
+  const delayed=new Promise(resolve=>{release=resolve;});
+  const t=await boot({organizer:true,initialSnapshot:activePrivateSession,
+    organizerRoster:privateRosterFixture,rpcOverride:async name=>{
+      if(hold&&name==="tm_org_roster"){await delayed;return {data:privateRosterFixture};}
+    }});
+  try{
+    hold=true;
+    t.setSnapshot({...activePrivateSession,revision:2});
+    const refreshing=t.refresh();
+    await new Promise(resolve=>setTimeout(resolve,10));
+    t.signOut();release();await refreshing;
+    assert(t.dom.window.document.querySelector("#tm-organizer").hidden);
+    assert.equal(t.dom.window.document.querySelector("#tm-roster").textContent,"");
+  }finally{release();t.close();}
+});
+
+test("polling removes organizer data after membership is revoked without logout",async()=>{
+  const t=await boot({organizer:true,initialSnapshot:activePrivateSession,
+    organizerRoster:privateRosterFixture});
+  try{
+    t.revokeRole();await t.refresh();
+    assert(t.dom.window.document.querySelector("#tm-organizer").hidden);
+    assert.equal(t.dom.window.document.querySelector("#tm-roster").textContent,"");
+  }finally{t.close();}
+});
+
+test("page caching clears private fields before back-navigation restoration",async()=>{
+  const t=await boot({organizer:true,initialSnapshot:activePrivateSession,
+    organizerRoster:privateRosterFixture});
+  try{
+    t.dom.window.dispatchEvent(new t.dom.window.Event("pagehide"));
+    assert(t.dom.window.document.querySelector("#tm-organizer").hidden);
+    assert.equal(t.dom.window.document.querySelector("#tm-roster").textContent,"");
+  }finally{t.close();}
+});
+
+test("an unchanged session returns after an interrupted refresh",async()=>{
+  let offline=false;
+  const t=await boot({organizer:true,initialSnapshot:activePrivateSession,
+    organizerRoster:privateRosterFixture,rpcOverride:async name=>{
+      if(offline && name==="tm_public_snapshot")return {error:{message:"Connection interrupted"}};
+    }});
+  try{
+    const doc=t.dom.window.document;
+    offline=true;
+    await t.refresh();
+    assert.equal(doc.querySelector("#tm-status").textContent,"Unavailable");
+    assert(doc.querySelector("#tm-organizer").hidden);
+    offline=false;
+    await t.refresh();
+    assert.equal(doc.querySelector("#tm-status").textContent,"Session live");
+    assert(!doc.querySelector("#tm-organizer").hidden);
+    assert.match(doc.querySelector("#tm-roster").textContent,/Private Player/);
   }finally{t.close();}
 });

@@ -7,6 +7,8 @@ on:
     paths:
       - 'db/**'
       - 'website/teams/**'
+      - 'scripts/**'
+      - 'tests/browser/**'
       - '.github/workflows/team-manager-local-supabase.yml'
   workflow_dispatch:
 
@@ -35,7 +37,7 @@ jobs:
       - name: Install maintained Supabase CLI v2
         uses: supabase/setup-cli@v3
         with:
-          version: v2.stable
+          version: v2.122.1
 
       - name: Install PostgreSQL client if necessary
         run: |
@@ -44,59 +46,14 @@ jobs:
             sudo apt-get install -y postgresql-client
           fi
 
-      - name: Initialize new, unlinked local project
+      - name: Install Chromium for the full browser-to-database check
         run: |
-          test ! -e supabase/config.toml
-          supabase init
-          supabase --version
-          # Never run supabase link, db push or any --remote operation.
+          npm ci --prefix tests/browser --ignore-scripts --no-audit --no-fund
+          ./tests/browser/node_modules/.bin/playwright install --with-deps chromium
 
-      - name: Start local Docker-based Supabase
-        run: supabase start
-
-      - name: Capture local connection data without logging credentials
-        shell: bash
+      - name: Exercise the release and the actual phone rehearsal on an unlinked stack
         run: |
-          set -euo pipefail
-          supabase status -o env > "$RUNNER_TEMP/team-manager-local.env"
-          for variable in API_URL DB_URL ANON_KEY SERVICE_ROLE_KEY; do
-            line="$(grep "^$variable=" "$RUNNER_TEMP/team-manager-local.env" | head -1)"
-            if [[ -z "$line" ]]; then
-              echo "Missing local Supabase status variable: $variable" >&2
-              exit 1
-            fi
-            value="$(printf '%s' "$line" | cut -d= -f2- | tr -d '"')"
-            echo "::add-mask::$value"
-            printf '%s=%s\n' "$variable" "$value" >> "$GITHUB_ENV"
-          done
-
-      - name: Apply synthetic COS Volleyball schema to local database only
-        run: psql "$DB_URL" -X -v ON_ERROR_STOP=1 -1 -f db/tests/local_supabase_baseline.sql
-
-      - name: Apply Teams Manager draft SQL to local database only
-        shell: bash
-        run: |
-          set -euo pipefail
-          for file in \
-            event_day_manager_foundation.sql \
-            event_day_manager_rotations.sql \
-            event_day_manager_game_actions.sql \
-            event_day_manager_player_actions.sql \
-            event_day_manager_team_history.sql \
-            event_day_manager_roster_adjustments.sql \
-            event_day_manager_emergency.sql \
-            event_day_manager_intra_team_rotation.sql \
-            event_day_manager_realtime.sql \
-            event_day_manager_public_limits.sql; do
-            psql "$DB_URL" -X -v ON_ERROR_STOP=1 -1 -f "db/drafts/$file"
-          done
-
-      - name: Audit all Teams Manager functions and private table grants in local Supabase
-        run: psql "$DB_URL" -X -v ON_ERROR_STOP=1 -f db/tests/security_matrix.sql
-
-      - name: Test real local Auth/JWT, REST API, RLS and imported event attendance
-        run: node db/tests/local_supabase_api.mjs
-
-      - name: Destroy local testing containers and volumes
-        if: always()
-        run: supabase stop --no-backup || true
+          python3 db/release/build_release.py --check
+          export TM_PREVIEW_PASSWORD="$(openssl rand -hex 16)"
+          echo "::add-mask::$TM_PREVIEW_PASSWORD"
+          node scripts/phone-review.mjs --ci

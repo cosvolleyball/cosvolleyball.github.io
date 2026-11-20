@@ -27,7 +27,8 @@ begin
   where r.id=p_rotation_id and r.status='published'
     and s.status='active'
   for update of s;
-  if not found then
+  if not found or not exists(select 1 from public.tm_rotations
+    where id=p_rotation_id and status='published') then
     raise exception 'Only an active published rotation can be adjusted'
       using errcode='22023';
   end if;

@@ -17,7 +17,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  chromium-smoke:
+  browser-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      TM_BROWSER: ${{ matrix.browser }}
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -30,10 +36,10 @@ jobs:
           node-version: '24'
 
       - name: Install exact pinned Playwright version for disposable CI
-        run: npm install --prefix tests/browser --no-audit --no-fund
+        run: npm ci --prefix tests/browser --ignore-scripts --no-audit --no-fund
 
-      - name: Install headless Chromium and Linux dependencies
-        run: ./tests/browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Install browser engine and Linux dependencies
+        run: ./tests/browser/node_modules/.bin/playwright install --with-deps ${{ matrix.browser }}
 
       - name: Validate browser test syntax
         run: node --check tests/browser/smoke.mjs

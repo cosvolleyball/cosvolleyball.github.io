@@ -41,7 +41,7 @@ begin
   if not found then
     raise exception 'Active session not found' using errcode='22023';
   end if;
-  if v_session.revision <> p_expected_revision then
+  if v_session.revision is distinct from p_expected_revision then
     raise exception 'Session changed; refresh roster before saving teams'
       using errcode='40001';
   end if;
@@ -212,7 +212,7 @@ begin
   if not found then
     raise exception 'Active session not found' using errcode='22023';
   end if;
-  if v_session.revision <> p_expected_revision then
+  if v_session.revision is distinct from p_expected_revision then
     raise exception 'Session changed; refresh before publishing'
       using errcode='40001';
   end if;
@@ -302,7 +302,8 @@ begin
     from public.tm_rotations r join public.tm_sessions s on s.id=r.session_id
     where r.id=p_rotation_id and r.status='published' and s.status='active'
     for update of s;
-  if v_session is null then
+  if v_session is null or not exists(select 1 from public.tm_rotations
+    where id=p_rotation_id and status='published') then
     raise exception 'Active published rotation not found' using errcode='22023';
   end if;
   if p_early is not true and exists(

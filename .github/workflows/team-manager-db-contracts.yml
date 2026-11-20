@@ -101,3 +101,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/abuse_limits.sql
       - name: Enumerate and audit privileges on all Teams Manager tables and RPCs
         run: psql -X -v ON_ERROR_STOP=1 -f db/tests/security_matrix.sql
+      - name: Reject queued changes after games or rotations close
+        run: python3 db/tests/concurrency_stale_actions.py
+      - name: Rehearse release migration and access rollback on a fresh local database
+        run: bash db/tests/release_artifacts.sh

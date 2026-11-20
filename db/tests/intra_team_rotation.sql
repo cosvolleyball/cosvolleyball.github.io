@@ -135,5 +135,13 @@ begin
     raise exception 'Reshuffled 4v4 game must have eight on-court participants';
   end if;
   perform public.tm_org_end_session(v_session);
+  -- Exactly thirteen people played the completed 6v6 game, including the
+  -- seventh roster member. The abandoned 4v4 game adds no rotation or win.
+  if (select count(*) from jsonb_array_elements(public.tm_org_stats(v_session)) p
+      where (p->>'rotations')::int=1 and (p->>'regular_games')::int=1)<>13
+    or (select count(*) from jsonb_array_elements(public.tm_org_stats(v_session)) p
+      where (p->>'wins')::int=1)<>7 then
+    raise exception 'Final participation must count completed appearances across rotations';
+  end if;
   raise notice '25-player session changed 4-team 6v6 to 6-team 4v4 successfully';
 end $intra_team_contract$;

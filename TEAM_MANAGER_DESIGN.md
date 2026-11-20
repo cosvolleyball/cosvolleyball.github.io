@@ -1,6 +1,6 @@
 # Event Day Teams Manager — living design
 
-**Status:** Pre-release foundation. This document is a working specification, not proof of a deployed feature. It is intended to be maintained while building the manager, not kept as a historical phase report.
+The release candidate is on [PR #6](https://github.com/cosvolleyball/cosvolleyball.github.io/pull/6). This document describes the organizer and player workflows.
 
 ## Product boundary
 
@@ -80,7 +80,7 @@ Opening winners get **three** games; the other three teams get **two**. All six 
 - A transfer changes a player's team membership for the **remainder of the current rotation only**. It cannot happen in the middle of a game or cause either team to fall below the playable lineup size. At the next team reshuffle, players are all available for new assignment.
 - Prevent starting a match if a team or player is unavailable due to a still-active game on the other court. A match may wait for a prerequisite result; this is not considered a permanent court assignment.
 
-All schedule invariants above are covered by the dedicated pure-function test suite; this is **not** yet a full server-authorized match engine.
+The scheduling tests enumerate opening outcomes. The database checks readiness against the actual results and active lineups on both courts before allowing a game to start.
 
 ## Temporary substitutes and rotation-long transfers
 
@@ -120,42 +120,10 @@ All schedule invariants above are covered by the dedicated pure-function test su
 - At end of the session, organizer-only summary reports wins, rotations, regular games and substitute appearances. The public view returns to its inactive state.
 - Session history may remain privately for troubleshooting but never influences future session game totals. Persistent profile attributes survive.
 
-## Supabase architecture — draft implementation, NOT deployed
+## Database and privacy
 
-**Existing observed database:** `public.events` (`id`, `visibility`, `status`), `public.registrations` (`event_id`, `player_name`, `player_email`, `registration_status`, `attendance_status`), and `public.organizers` (`user_id`). All three have RLS enabled. Organizer access is currently represented by a row in `public.organizers`.
+The manager reads the organizer-selected event from `public.events`, imports its roster from `public.registrations`, and verifies organizer membership through `public.organizers`. It keeps its profiles, attendance, teams, appearances, corrections and action history in dedicated manager tables. The organizer-only participation summary counts a rotation once per player who appeared in at least one completed game in that rotation.
 
-A first version of the isolated data model is in `db/drafts/event_day_manager_foundation.sql`. It has been applied successfully against a disposable PostgreSQL 17 test database, **not production**. `db/tests/fixture.sql` and `db/tests/contracts.sql` verify access control, profile and roster import, walk-ins, stats isolation, and deletion independence. The CI workflow is `.github/workflows/team-manager-db-contracts.yml`. This is not a signed-off migration and must not be applied to production before complete backend review.
+Browser clients use scoped database functions. Organizer functions check the signed-in account. Players see a sanitized public snapshot and can start games, report winners, record valid substitutes, rotate a teammate or record a permitted five-team transfer. The database serializes competing changes and rejects actions that became stale while waiting. Realtime broadcasts carry a revision signal. Each client fetches the appropriate snapshot and polls for missed updates.
 
-New isolated data model:
-- Private `team_manager_profiles`: profile ID, normalized unique email, skill/gender/positions, audit timestamps; organizer-only RLS.
-- `team_manager_sessions`: selected event ID, 1-active-session invariant, settings, status, version.
-- `team_manager_session_players`: present/late/break/departed state, profile ID, optional registration ID, display name.
-- `tm_rotations`, `tm_teams`, `tm_memberships`: unpublished draft and current published roster snapshots, **rotation-specific playing format**, balance settings, court assignments where applicable, and a history of approved between-game five-team transfers.
-- `team_manager_games`, `team_manager_game_participants`, `team_manager_substitutions`: match state, actual players on court, winner, substitution role.
-- Restricted action log with timestamps, action type, changed IDs, and organizer identity when authenticated; no public emails.
-
-Use separate, **narrow RPC endpoints**:
-- Organizer-only: choose source event, import players, edit profiles/attendance, generate and publish teams, correct results, end session, view private stats.
-- Public read: fetch only sanitized active-session state (even if source event is invite-only, as the owner requested).
-- Public write: start eligible game, submit its winner, and record a one-game eligible substitute **only for a supported format**. Implement a separate validated five-team transfer workflow; its authorization and audit requirements must be tested explicitly. No arbitrary public table INSERT/UPDATE.
-
-Concurrency: server-side validation and row locking/version checking for every state-changing RPC. Lock enough records to enforce first-valid-write and no double-booked substitutes; reject stale writes. Audit public actions without pretending a public user has a verified identity. Consider rate limits and abuse recovery given anonymous write permission.
-
-**Security:** private player profile/email/statistics tables must never be exposed via an anonymous read; RLS and function permissions are enforced in Postgres. Do not publish a Realtime stream of sensitive row payloads. Instead send a public revision signal / sanitized projection and refetch the authorized public snapshot. Explicit grants, pinned search paths and least-privilege functions must be tested with anon and organizer roles. No schema or live database changes are authorized by this design-only branch.
-
-## Implementation order
-
-1. **Foundation (this branch):** inspected schema/site structure; tested pure scheduling invariants for 4/5/6 teams and organizer-only draft balancing; this living spec. No public link or production backend alterations.
-2. **Data contract and security:** foundation plus organizer draft/publish SQL review drafts are committed in `db/drafts/` and integrated against PostgreSQL 17 fixtures in CI. Still outstanding: the public game-action RPCs, concurrency tests, true Supabase staging/RLS verification, and migration review. **Nothing has been applied to production.**
-3. **Organizer experience (initial implementation):** the isolated `website/teams/` page includes an event picker, automatically included registered roster, visible but pending waitlist, one-click no-show/restore, walk-ins, private profile editing, local draft generation, swaps/moves/undo, private draft saving and explicit publish, early rotation close and private statistics. Not production-tested or deployed.
-4. **Public experience (initial implementation):** same-site navigation now links to the new Teams Manager; it renders sanitized active-session teams/courts and refreshes automatically at an 8-second interval. The feature branch now includes anonymous game start, winner reporting, same-court voluntary subs for six teams, five-team permanent transfers, emergency injury substitutions, ordinary in-game teammate rotations, and organizer corrections. These are backed by isolated PostgreSQL tests, **not yet staging or production verification**. Still missing: true realtime notification subscriptions, negative/security abuse testing, comprehensive concurrent connection tests, and real-device QA.
-5. **Unusual attendance and end-to-end QA:** 4v4/5v5/6v6 lineup capacities, player breaks, late/early movement, five-team court transitions, full real-device testing; release only when confirmed.
-
-## Decisions still requiring validation before live release
-
-- Validate **five-team permanent-transfer** timing, source-team lineup capacity, and fairness accounting with concurrent match-state tests; temporary substitutes are explicitly prohibited in this format.
-- Exercise **per-rotation format changes** across one session (e.g., 25 check-ins: 4 teams 6v6 then 6 teams 4v4) and ensure attendance, position-balancing toggles, and participation stats remain correct when player counts change.
-- Validate public-write burst caps (120/session/minute, 40/game/minute), recovery after rate limiting, and deliberate unauthorized attempts; anonymous actions cannot cryptographically prove player consent.
-- What should happen when teams cannot field enough players for a legitimate game; do not automatically steal from another court.
-
-These issues should be exercised in simulated rotations before database migrations or public launch.
+[Verification and test coverage](TEAM_MANAGER_STAGING_PLAN.md) · [Release migration and recovery](db/release/README.md)

@@ -112,6 +112,14 @@ begin
          where id=v_session)<>v_revision then
     raise exception 'Rate-limited public RPC left partial game changes';
   end if;
+  -- Advance only synthetic audit timestamps, rather than sleep a minute.
+  -- Legitimate public actions must recover automatically once the window expires.
+  update public.tm_action_audit set recorded_at=clock_timestamp()-interval '61 seconds'
+    where session_id=v_session and action='record_sub';
+  perform public.tm_public_start_game(v_game);
+  if (select status from public.tm_games where id=v_game)<>'playing' then
+    raise exception 'Public action did not recover after the rate window expired';
+  end if;
   perform public.tm_org_end_session(v_session);
-  raise notice 'Anonymous burst limits and atomic RPC rollback passed';
+  raise notice 'Anonymous burst limits, atomic rollback and recovery passed';
 end $abuse_contract$;

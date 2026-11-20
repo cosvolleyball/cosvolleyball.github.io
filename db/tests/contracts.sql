@@ -141,6 +141,10 @@ begin
 
   -- Deleting an original event must remain possible (and not erase
   -- persistent player profiles or crash the active public snapshot).
+  -- Production registrations use ON DELETE RESTRICT. The existing site
+  -- explicitly deletes registrations first; manager references must clear.
+  delete from public.registrations
+    where event_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   delete from public.events
     where id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   if (select event_id from public.tm_sessions where id=v_session) is not null

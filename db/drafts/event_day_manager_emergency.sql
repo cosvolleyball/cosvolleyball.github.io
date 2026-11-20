@@ -51,7 +51,15 @@ begin
     raise exception 'Emergency substitutions require an active game'
       using errcode='22023';
   end if;
-  select * into v_game from public.tm_games where id=p_game_id;
+  -- Joined game/rotation predicates may be stale after waiting for s.
+  -- Read their state again under the acquired session lock.
+  select g.* into v_game from public.tm_games g
+  join public.tm_rotations r on r.id=g.rotation_id
+  where g.id=p_game_id and g.status='playing' and r.status='published';
+  if not found then
+    raise exception 'Emergency substitutions require an active game'
+      using errcode='22023';
+  end if;
   select count(*) into v_team_count from public.tm_teams
     where rotation_id=v_game.rotation_id;
   if v_team_count<>6 then
@@ -144,7 +152,14 @@ begin
     raise exception 'Game is not eligible for lineup correction'
       using errcode='22023';
   end if;
-  select * into v_game from public.tm_games where id=p_game_id;
+  select g.* into v_game from public.tm_games g
+  join public.tm_rotations r on r.id=g.rotation_id
+  where g.id=p_game_id and g.status in ('playing','completed')
+    and r.status in ('published','completed','ended_early');
+  if not found then
+    raise exception 'Game is not eligible for lineup correction'
+      using errcode='22023';
+  end if;
   select * into v_wrong from public.tm_game_appearances
     where game_id=p_game_id and session_player_id=p_wrong_player_id;
   if not found or p_wrong_player_id=p_correct_player_id then

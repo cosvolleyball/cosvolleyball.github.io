@@ -513,28 +513,21 @@ begin
   end if;
   select coalesce(jsonb_agg(jsonb_build_object(
     'name',sp.display_name, 'email',p.email,
-    'regular_games', (
-      select count(*) from public.tm_game_appearances a
-      join public.tm_games g on g.id = a.game_id
-      where a.session_player_id=sp.id
-      and g.status='completed' and not a.is_substitute
-    ),
-    'sub_games', (
-      select count(*) from public.tm_game_appearances a
-      join public.tm_games g on g.id = a.game_id
-      where a.session_player_id=sp.id
-      and g.status='completed' and a.is_substitute
-    ),
-    'wins', (
-      select count(*) from public.tm_game_appearances a
-      join public.tm_games g on g.id = a.game_id
-      where a.session_player_id=sp.id and g.status='completed'
-      and a.team_id=g.winner_team_id
-    )
+    'rotations', totals.rotations, 'regular_games', totals.regular_games,
+    'sub_games', totals.sub_games, 'wins', totals.wins
   ) order by sp.display_name,sp.id),'[]'::jsonb)
   into v_result
   from public.tm_session_players sp
   join public.tm_profiles p on p.id=sp.profile_id
+  cross join lateral (
+    select count(distinct g.rotation_id) as rotations,
+      count(*) filter (where not a.is_substitute) as regular_games,
+      count(*) filter (where a.is_substitute) as sub_games,
+      count(*) filter (where a.team_id=g.winner_team_id) as wins
+    from public.tm_game_appearances a
+    join public.tm_games g on g.id=a.game_id
+    where a.session_player_id=sp.id and g.status='completed'
+  ) totals
   where sp.session_id=p_session_id;
   return coalesce(v_result,'[]'::jsonb);
 end $$;

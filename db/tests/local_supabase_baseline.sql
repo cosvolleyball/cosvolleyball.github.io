@@ -16,7 +16,7 @@ create table public.events (
 );
 create table public.registrations (
   id uuid primary key default gen_random_uuid(),
-  event_id uuid not null references public.events(id) on delete cascade,
+  event_id uuid not null references public.events(id) on delete restrict,
   player_name text not null,
   player_email text not null,
   registration_status text not null,

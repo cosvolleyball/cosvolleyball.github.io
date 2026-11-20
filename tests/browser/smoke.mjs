@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {readFile} from "node:fs/promises";
 import path from "node:path";
-import {chromium} from "playwright";
+import {chromium,webkit} from "playwright";
 
 const root=path.resolve(import.meta.dirname,"../..");
 const types={".html":"text/html; charset=utf-8",
@@ -60,7 +60,10 @@ function sample(count){
   };
 }
 const fakeModule="export function createClient(){return window.__teamsBrowserClient;}";
-const browser=await chromium.launch({headless:true,args:["--no-sandbox"]});
+const engine=process.env.TM_BROWSER || "chromium";
+if(!["chromium","webkit"].includes(engine))throw new Error("Unsupported test browser");
+const browser=await ({chromium,webkit}[engine]).launch({headless:true,
+  ...(engine==="chromium"?{args:["--no-sandbox"]}:{})});
 
 async function openPage({snapshot,organizer=false,width=1280,height=850,
   roster=[],lineups={}}={}){
@@ -81,11 +84,13 @@ async function openPage({snapshot,organizer=false,width=1280,height=850,
     window.__teamsRoster=roster;
     window.__teamsLineups=lineups;
     window.__teamsCalls=[];
-    let changedCallback;
+    let changedCallback,authCallback;
+    let signedIn=organizer;
+    window.__teamsSignOut=()=>{signedIn=false;authCallback?.("SIGNED_OUT",null);};
     window.__teamsBrowserClient={
       auth:{getUser:async()=>({
-        data:{user:organizer?{id:"fake-org-id"}:null},error:null
-      })},
+        data:{user:signedIn?{id:"fake-org-id"}:null},error:null
+      }),onAuthStateChange(callback){authCallback=callback;return {data:{subscription:{unsubscribe(){}}}};}},
       from(table){
         return {select(){
           return {eq(){
@@ -205,7 +210,7 @@ try {
       c.args.p_game_id==="g1"&&c.args.p_winner_team_id==="t1"));
     await verifyNoPageOverflow(page,"390px completed-game view");
     assert.deepEqual(mobile.errors,[]);
-    console.log("PASS Chromium mobile 390px six-team game start/winner flow");
+    console.log("PASS "+engine+" mobile 390px six-team game start/winner flow");
   }finally{await mobile.context.close();}
 
   // A seven-person 6v6 roster shares an on-court spot: the seventh
@@ -245,7 +250,7 @@ try {
       c.args.p_out_player_id==="middle-0"&&
       c.args.p_in_player_id==="middle-6"));
     assert.deepEqual(seven.errors,[]);
-    console.log("PASS Chromium mobile seven-player 6v6 regular in-game teammate rotation");
+    console.log("PASS "+engine+" mobile seven-player 6v6 regular in-game teammate rotation");
   }finally{await seven.context.close();}
 
   const five=await openPage({snapshot:sample(5),width:390,height:844});
@@ -265,7 +270,7 @@ try {
     assert(calls.some(c=>c.name==="tm_public_transfer"&&
       c.args.p_session_player_id==="p1"&&c.args.p_to_team_id==="t2"));
     assert.deepEqual(five.errors,[]);
-    console.log("PASS Chromium mobile five-team transfer without temporary subs");
+    console.log("PASS "+engine+" mobile five-team transfer without temporary subs");
   }finally{await five.context.close();}
 
   const roster=[
@@ -300,7 +305,7 @@ try {
     assert(!calls.some(c=>/registration/.test(c.name)),
       "One-click attendance may not write to source event registrations");
     assert.deepEqual(desktop.errors,[]);
-    console.log("PASS Chromium desktop organizer no-show/restore with no registration writes");
+    console.log("PASS "+engine+" desktop organizer no-show/restore with no registration writes");
   }finally{await desktop.context.close();}
 
   const organizerPhone=await openPage({snapshot:organizerSnapshot,
@@ -322,7 +327,10 @@ try {
       window.__teamsRoster.some(p=>p.id==="registered"&&p.attendance==="present"));
     await verifyNoPageOverflow(page,"390px organizer after attendance correction");
     assert.deepEqual(organizerPhone.errors,[]);
-    console.log("PASS Chromium mobile organizer stacked attendance/no-show/restore");
+    await page.evaluate(()=>window.__teamsSignOut());
+    assert(await page.locator("#tm-organizer").isHidden());
+    assert.equal(await page.locator("#tm-roster").textContent(),"");
+    console.log("PASS mobile organizer attendance and immediate logout privacy cleanup");
   }finally{await organizerPhone.context.close();}
 }finally{
   await browser.close();
