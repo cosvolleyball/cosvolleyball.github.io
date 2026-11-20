@@ -67,13 +67,19 @@ try {
   // Start both opening courts so the seven-player roster is guaranteed to be playing.
   for (const court of await player.locator('.tm-court').all())
     await court.locator('[data-tm-game-action="start"]').first().click();
+  await player.waitForFunction(()=>document.querySelectorAll('.tm-game.is-playing').length===2);
   const swap = player.locator('[data-tm-game-action="rotate-teammate"]').first();
   await swap.waitFor();
   const block = swap.locator('..');
-  await block.locator('[data-rotate-out]').selectOption({index:1});
+  const [outgoing] = await block.locator('[data-rotate-out]').selectOption({index:1});
   await block.locator('[data-rotate-in]').selectOption({index:1});
   await swap.click();
-  await player.locator('#tm-feedback').filter({hasText:/rotation recorded|teammate rotation/i}).waitFor();
+  await player.waitForFunction(()=>{
+    const feedback=document.querySelector('#tm-feedback');
+    return feedback.classList.contains('is-error') || feedback.textContent.includes('Teammate rotation recorded');
+  });
+  assert.match(await player.locator('#tm-feedback').innerText(),/Teammate rotation recorded/);
+  await block.locator('[data-rotate-in] option[value="'+outgoing+'"]').waitFor({state:'attached'});
   const game = player.locator('.tm-game.is-playing').first();
   await game.locator('[data-report-winner]').selectOption({index:1});
   await game.getByRole('button',{name:'Report winner'}).click();

@@ -91,11 +91,11 @@ function gameControls(g, teams, session) {
         data-game-id="${escapeHtml(g.id)}">Start game</button>
       ${options.length ? `<div class="tm-sub-form">
         <strong>Voluntary substitute from ${escapeHtml(resting.label)}</strong>
-        <label>Player<select data-sub-player="${escapeHtml(g.id)}">
+        <label>Player<select id="sub-player-${escapeHtml(g.id)}" data-sub-player="${escapeHtml(g.id)}">
           <option value="">Choose player…</option>
           ${options.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
         </select></label>
-        <label>Playing for<select data-sub-team="${escapeHtml(g.id)}">
+        <label>Playing for<select id="sub-team-${escapeHtml(g.id)}" data-sub-team="${escapeHtml(g.id)}">
           <option value="">Choose team…</option>
           ${[g.team_a_id,g.team_b_id].map(id=>
             `<option value="${escapeHtml(id)}">${escapeHtml(teamName(teams,id))}</option>`).join("")}
@@ -130,7 +130,7 @@ function gameControls(g, teams, session) {
       }] : [];
     });
     return `<div class="tm-game-actions">
-      <label>Winner<select data-report-winner="${escapeHtml(g.id)}">
+      <label>Winner<select id="report-winner-${escapeHtml(g.id)}" data-report-winner="${escapeHtml(g.id)}">
         <option value="">Select winner…</option>
         ${[g.team_a_id,g.team_b_id].map(id=>
           `<option value="${escapeHtml(id)}">${escapeHtml(teamName(teams,id))}</option>`).join("")}
@@ -139,11 +139,11 @@ function gameControls(g, teams, session) {
         data-tm-game-action="winner" data-game-id="${escapeHtml(g.id)}">Report winner</button>
       ${ordinaryRotations.map(option=>`<div class="tm-sub-form">
         <strong>${escapeHtml(option.team.label)} — rotate a teammate into this game</strong>
-        <label>Player leaving court<select data-rotate-out="${escapeHtml(g.id)}-${escapeHtml(option.team.id)}">
+        <label>Player leaving court<select id="rotate-out-${escapeHtml(g.id)}-${escapeHtml(option.team.id)}" data-rotate-out="${escapeHtml(g.id)}-${escapeHtml(option.team.id)}">
           <option value="">Choose player…</option>
           ${option.current.map(p=>`<option value="${escapeHtml(p.player_id)}">${escapeHtml(p.name)}</option>`).join("")}
         </select></label>
-        <label>Teammate entering<select data-rotate-in="${escapeHtml(g.id)}-${escapeHtml(option.team.id)}">
+        <label>Teammate entering<select id="rotate-in-${escapeHtml(g.id)}-${escapeHtml(option.team.id)}" data-rotate-in="${escapeHtml(g.id)}-${escapeHtml(option.team.id)}">
           <option value="">Choose player…</option>
           ${option.sitting.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
         </select></label>
@@ -156,7 +156,7 @@ function gameControls(g, teams, session) {
       ${resting && activeLineup.length ? `<div class="tm-sub-form">
         <strong>Emergency injury substitution (six-team games only)</strong>
         <label>Player leaving court
-          <select data-emergency-out="${escapeHtml(g.id)}">
+          <select id="emergency-out-${escapeHtml(g.id)}" data-emergency-out="${escapeHtml(g.id)}">
           <option value="">Choose outgoing player…</option>
           ${activeLineup.map(p=>`<option value="${escapeHtml(p.player_id)}">
             ${escapeHtml(p.name)} (${escapeHtml(teamName(teams,p.team_id))})
@@ -164,7 +164,7 @@ function gameControls(g, teams, session) {
           </select>
         </label>
         <label>Replacement from ${escapeHtml(resting.label)}
-          <select data-emergency-in="${escapeHtml(g.id)}">
+          <select id="emergency-in-${escapeHtml(g.id)}" data-emergency-in="${escapeHtml(g.id)}">
             <option value="">Choose replacement…</option>
             ${(resting.players||[]).filter(p=>
               !activeLineup.some(a=>a.player_id===p.id)).map(p=>
@@ -215,6 +215,27 @@ function rotationTransferControls(teams, session) {
         data-rotation-id="${escapeHtml(session.rotation_id)}">Transfer until reshuffle</button>
     </div>
   </section>`;
+}
+
+// The schedule has fixed court and game positions within one rotation. Keep
+// unchanged cards attached so another court can update while a picker is open.
+function updatePublicSections(current, next) {
+  const previous = Array.from(current.children);
+  const incoming = Array.from(next.children);
+  incoming.forEach((section, index) => {
+    const old = previous[index];
+    if (!old) {
+      current.append(section);
+    } else if (!old.isEqualNode(section)) {
+      if ((old.matches(".tm-courts") && section.matches(".tm-courts")) ||
+          (old.matches(".tm-court") && section.matches(".tm-court"))) {
+        updatePublicSections(old, section);
+      } else {
+        old.replaceWith(section);
+      }
+    }
+  });
+  for (const extra of previous.slice(incoming.length)) extra.remove();
 }
 
 function renderPublic() {
@@ -278,10 +299,27 @@ function renderPublic() {
     <ul>${(team.players || []).map(p=>
       `<li>${escapeHtml(p.name)}</li>`).join("")}</ul>
   </article>`).join("");
-  container.innerHTML = `<h3>${escapeHtml(s.event_title || "Volleyball session")}</h3>
+  const markup = `<h3>${escapeHtml(s.event_title || "Volleyball session")}</h3>
     <div class="tm-courts">${courts}</div>
     <h3>Team rosters</h3><div class="tm-team-grid">${rosters}</div>
     ${rotationTransferControls(teams,s)}`;
+  if (container.dataset.rotation !== s.rotation_id) {
+    container.innerHTML = markup;
+    container.dataset.rotation = s.rotation_id;
+    return;
+  }
+  const selections = new Map(Array.from(container.querySelectorAll("select[id]"),
+    select => [select.id, select.value]));
+  const next = document.createElement("template");
+  next.innerHTML = markup;
+  updatePublicSections(container, next.content);
+  // A changed game can still offer the same valid selection. Removed players
+  // and completed games must never regain an obsolete value.
+  for (const select of container.querySelectorAll("select[id]")) {
+    const value = selections.get(select.id);
+    if (value && !select.value && Array.from(select.options).some(option => option.value===value))
+      select.value=value;
+  }
 }
 
 function formatStats(stats) {

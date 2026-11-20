@@ -384,6 +384,29 @@ test("organizer can select 25 players as four teams 6v6 or six teams 4v4",async(
   }finally{t.close();}
 });
 
+test("another court can start while a player is choosing their game winner", async()=>{
+  const teams=makeTeams(4);
+  const game=(id,court,status,team_a_id,team_b_id)=>({
+    id,court,status,round:1,team_a_id,team_b_id,winner_team_id:null
+  });
+  const first=game("one",1,"playing","team1","team2");
+  const second=game("two",2,"ready","team3","team4");
+  const session={active:true,session_id:"session",format:6,revision:2,
+    rotation_id:"rotation",rotation_status:"published",teams,games:[first,second]};
+  const t=await boot({initialSnapshot:session});
+  try {
+    const doc=t.dom.window.document;
+    const picker=doc.querySelector('[data-report-winner="one"]');
+    picker.value="team2";
+    picker.focus();
+    t.setSnapshot({...session,revision:3,games:[first,{...second,status:"playing"}]});
+    await t.refresh();
+    assert.equal(doc.querySelector('[data-report-winner="one"]').value,"team2");
+    assert.equal(doc.activeElement,picker,"another court's update must leave the open control in place");
+    assert(doc.querySelector('[data-report-winner="two"]'));
+  } finally { t.close(); }
+});
+
 test("anonymous seven-player team can record a normal 6v6 teammate rotation",async()=>{
   const teams=makeTeams(4);
   teams[0].players=Array.from({length:7},(_,i)=>({
