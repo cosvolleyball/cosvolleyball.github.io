@@ -15,7 +15,7 @@ GitHub Pages serves the static files in `website/`. The browser uses the project
 
 ## Registration and email
 
-The registration function locks the event row while checking capacity. It creates a confirmed registration or a waitlist entry. When a spot opens, eligible waitlisted players can be promoted. Public roster functions return display names and status. Access to private-event rosters requires the invitation link, and organizer access controls protect contact details, restrictions and finances.
+The registration function locks the event row while checking capacity. It creates a confirmed registration or a waitlist entry. When a spot opens, eligible waitlisted players can be promoted. During signup, an active restriction sends the player to the waitlist and a ban blocks registration. In either case the player sees the reason on the current rule when an organizer has supplied one. Removal notes stay in organizer history. Public roster functions return display names and status. Access to private-event rosters requires the invitation link, and organizer access controls protect contact details, restrictions and finances.
 
 New registrations accept Venmo and cash. Existing payment entries retain their original recorded methods. Confirmation and status changes are queued in a private email outbox. A scheduled Google Apps Script worker retrieves notifications through the authenticated `volleyball-email-bridge` Supabase Edge Function, sends them through Gmail/MailApp and reports delivery outcomes. A delayed message can be investigated independently of a successful registration. The email's management link supports self-cancellation.
 

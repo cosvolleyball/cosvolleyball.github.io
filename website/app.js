@@ -540,6 +540,15 @@ $("signup-form").addEventListener("submit",async ev=>{
   });
   btn.disabled=false;btn.textContent="Confirm registration";
   if (error) {
+    if (error.code === "VB001") {
+      $("signup-error").textContent = "You’re banned from registering. Contact an organizer if you have questions.";
+      const reason = typeof error.details === "string" ? error.details.trim() : "";
+      $("registration-ban-reason").textContent = reason ? "Organizer’s reason: " + reason : "";
+      $("registration-ban-reason").hidden = !reason;
+      $("registration-ban-dialog").showModal();
+      $("registration-ban-title").focus();
+      return;
+    }
     $("signup-error").textContent=error.message.includes("duplicate")?"You already have a registration for this event.":error.message;return;
   }
   $("signup-dialog").close();
@@ -706,8 +715,7 @@ $("phase10-access-panel").addEventListener("toggle", () => {
 });
 $("phase10-action").addEventListener("change", () => {
   const clearing = $("phase10-action").value === "clear";
-  $("phase10-reason").required = !clearing;
-  $("phase10-reason").minLength = clearing ? 0 : 3;
+  $("phase10-reason-label").textContent = clearing ? "Removal note (optional)" : "Reason shown to the player (optional)";
 });
 $("phase10-action").dispatchEvent(new Event("change"));
 $("phase10-access-form").addEventListener("submit", async event => {
@@ -716,8 +724,8 @@ $("phase10-access-form").addEventListener("submit", async event => {
   const email = $("phase10-email").value.trim();
   const action = $("phase10-action").value;
   const reason = $("phase10-reason").value.trim();
-  if (action !== "clear" && (reason.length < 3 || reason.length > 240)) {
-    $("phase10-feedback").textContent = "Enter a reason between 3 and 240 characters.";
+  if (reason.length > 240) {
+    $("phase10-feedback").textContent = "Enter up to 240 characters.";
     return;
   }
   if (action === "ban" && !window.confirm(

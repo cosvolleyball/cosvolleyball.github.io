@@ -110,6 +110,15 @@
     <p id="signup-error" class="error" role="alert" aria-live="assertive"></p>
   </form>
 </dialog>
+<dialog id="registration-ban-dialog" aria-labelledby="registration-ban-title" aria-describedby="registration-ban-reason registration-ban-contact">
+  <div class="registration-ban-content">
+    <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+    <h2 id="registration-ban-title" tabindex="-1">You’re banned from registering</h2>
+    <p id="registration-ban-reason" hidden></p>
+    <p id="registration-ban-contact">This ban applies to COS Volleyball events. For questions, <a href="mailto:cospickupvolleyball@gmail.com">contact an organizer</a>.</p>
+    <form method="dialog"><button class="button" type="submit">Close</button></form>
+  </div>
+</dialog>
 <!-- Only shown after a successful registration response. Never includes management tokens. -->
 <dialog id="registration-success-dialog" aria-labelledby="registration-success-title" aria-describedby="registration-success-description">
   <div class="success-dialog-content">
@@ -164,7 +173,7 @@
               <option value="ban">Ban new registrations permanently</option>
               <option value="clear">Remove existing restriction / ban</option>
             </select></label>
-            <label>Reason / note<textarea id="phase10-reason" rows="2" maxlength="240" placeholder="e.g., repeated no-shows"></textarea></label>
+            <label><span id="phase10-reason-label">Reason shown to the player (optional)</span><textarea id="phase10-reason" rows="2" maxlength="240"></textarea></label>
             <button type="submit" class="button" id="phase10-save">Save access rule</button>
             <p id="phase10-feedback" role="status" aria-live="polite" class="small"></p>
           </form>
