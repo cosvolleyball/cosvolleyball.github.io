@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.119.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.119.2/es2022/supabase-js.bundle.mjs";
 import { generateBalancedTeams, scoreBalancedDraft, suggestSharedRolePairs } from "./balancing.mjs";
 import { rotationOptions } from "./rotation-options.mjs";
 import { normalizedGender, normalizedPosition, positionChoices } from "./profile-options.mjs";
@@ -48,6 +48,7 @@ const state = {
   correctionAppearances: [],
   refreshing: false,
   pendingRefresh: false,
+  pendingOrganizerCheck: false,
   pendingForcePrivate: false
 };
 const statuses = ["present", "candidate", "absent", "waiting", "break", "departed"];
@@ -858,17 +859,18 @@ async function loadPrivate() {
   renderRoster();
   renderOrganizer();
 }
-async function refresh(forcePrivate = false) {
+async function refresh(forcePrivate = false, verifyOrganizer = false) {
   // If a broadcast arrives during a network request, guarantee a second
   // server read rather than silently discarding the newest revision.
   if(state.refreshing){
     state.pendingRefresh=true;
     state.pendingForcePrivate ||= forcePrivate;
+    state.pendingOrganizerCheck ||= verifyOrganizer;
     return;
   }
   state.refreshing=true;
   try {
-    if(state.isOrganizer || state.retryOrganizerCheck)await checkOrganizer();
+    if(verifyOrganizer || state.isOrganizer || state.retryOrganizerCheck)await checkOrganizer();
     const snapshot = await rpc("tm_public_snapshot");
     if (snapshot?.active && snapshot.rotation_status === "published") {
       const ready = (snapshot.games||[]).filter(g=>g.status==="ready");
@@ -918,7 +920,9 @@ async function refresh(forcePrivate = false) {
       const pendingPrivate=state.pendingForcePrivate;
       state.pendingRefresh=false;
       state.pendingForcePrivate=false;
-      void refresh(pendingPrivate);
+      const pendingCheck=state.pendingOrganizerCheck;
+      state.pendingOrganizerCheck=false;
+      void refresh(pendingPrivate, pendingCheck);
     }
   }
 }
@@ -1341,13 +1345,11 @@ function connectRealtime() {
          (state.organizerUserId && state.organizerUserId!==session.user.id))
         clearOrganizer();
       // Supabase auth callbacks must not await another auth operation.
-      if(session?.user)setTimeout(()=>void action(async()=>{
-        await checkOrganizer();
-        await refresh(true);
+      if(event !== "INITIAL_SESSION" && session?.user)setTimeout(()=>void action(async()=>{
+        await refresh(true, true);
       }),0);
     });
-    await checkOrganizer();
-    await refresh(true);
+    await refresh(true, true);
     connectRealtime();
   } catch(e) {
     console.error("Teams Manager initialization error",e);
@@ -1359,14 +1361,12 @@ function connectRealtime() {
 setInterval(()=>{if(supabase&&!document.hidden)void refresh();},8000);
 document.addEventListener("visibilitychange",()=>{
   if(supabase&&!document.hidden)void action(async()=>{
-    await checkOrganizer();
-    await refresh(true);
+    await refresh(true, true);
   });
 });
 window.addEventListener("pageshow",event=>{
   if(supabase&&event.persisted)void action(async()=>{
-    await checkOrganizer();
-    await refresh(true);
+    await refresh(true, true);
     if(!publicChangesChannel)connectRealtime();
   });
 });

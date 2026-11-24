@@ -93,6 +93,39 @@ const results = [];
     }
   }
   await boot();
+  await test("Dashboard batches roster pages and builds controls when an event opens", async () => {
+    await boot("?dashboard=1");
+    const result = await page.evaluate(async () => {
+      const events = Array.from({length: 20}, (_, i) => ({
+        id: "event-" + i, title: "Practice " + i, venue: "Gym", status: "published",
+        visibility: "public", starts_at: "2027-01-02T12:00Z", ends_at: "2027-01-02T14:00Z"
+      }));
+      const rows = Array.from({length: 501}, (_, i) => ({
+        id: "player-" + i, player_name: "Player " + i, event_id: events[i % 20].id,
+        registration_status: "waitlisted"
+      }));
+      const pages = [];
+      window.queryHandler = q => {
+        if (q.table === "events") return {data: events};
+        if (q.table !== "registrations") return {data: []};
+        const [, start, end] = q.ops.find(([op]) => op === "range");
+        pages.push(start);
+        return {data: rows.slice(start, end + 1)};
+      };
+      testing.setOrganizer(true);
+      await testing.loadAdminEvents();
+      const initialRows = document.querySelectorAll("[data-player]").length;
+      const card = document.querySelector('[data-admin-collapse-id="event-0"]');
+      card.open = true;
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const toggle = card.querySelector("[data-unpaid-toggle]");
+      toggle.click();
+      return {pages, initialRows, count: card.querySelectorAll("[data-player]").length,
+        last: !!card.querySelector('[data-player="player-500"]'), toggled: toggle.getAttribute("aria-pressed")};
+    });
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), {pages: [0,500], initialRows: 0, count: 26, last: true, toggled: "true"});
+    await boot();
+  });
   await test("Initial page loads without JavaScript errors", () =>
     assert.deepEqual(errors, []));
   await test("Valid email formats accepted (8 cases)", async () =>
