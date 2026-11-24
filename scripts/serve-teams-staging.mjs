@@ -16,16 +16,18 @@ export async function serveTeamsPreview({api, publicKey, lan}) {
   const allowed=new Map([
     ['/styles.css','styles.css'],['/favicon.svg','favicon.svg'],
     ['/favicon-192.png','favicon-192.png'],
+    ...['dm-sans-latin-wght-normal', ...[600,700,800].map(w=>'barlow-condensed-latin-'+w+'-normal')]
+      .map(name=>['/fonts/'+name+'.woff2','fonts/'+name+'.woff2']),
     ...['index.html','teams.mjs','teams.css','scheduling.mjs','balancing.mjs','rotation-options.mjs','profile-options.mjs']
       .map(name=>['/teams/'+name,'teams/'+name])
   ]);
-  const types={'.html':'text/html','.css':'text/css','.mjs':'text/javascript','.svg':'image/svg+xml','.png':'image/png'};
+  const types={'.html':'text/html','.css':'text/css','.mjs':'text/javascript','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2'};
   const login=`<!doctype html><meta name="viewport" content="width=device-width"><title>Local organizer sign-in</title>
   <h1>Local test organizer</h1><p>The practice password appears in the host terminal.</p>
   <form><label>Email <input id="email" value="organizer@phone-review.example.invalid" type="email" required autocomplete="username"></label><br>
   <label>Password <input id="password" type="password" required autocomplete="current-password"></label><br><button>Sign in</button></form><p id="message"></p>
   <script src="/staging-config.js"></script><script type="module">
-  import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.119.0';
+  import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.119.2/es2022/supabase-js.bundle.mjs';
   const cfg=window.TEAMS_MANAGER_STAGING_CONFIG,client=createClient(cfg.url,cfg.publishableKey);
   document.querySelector('form').onsubmit=async event=>{event.preventDefault();
   const {error}=await client.auth.signInWithPassword({email:document.querySelector('#email').value,password:document.querySelector('#password').value});

@@ -1,6 +1,6 @@
 import {
   createClient
-} from "https://esm.sh/@supabase/supabase-js@2";
+} from "https://esm.sh/@supabase/supabase-js@2.119.2/es2022/supabase-js.bundle.mjs";
 
 // Public browser configuration. Replace only the two placeholders below.
 // These values are safe to expose to a browser: Supabase Row Level Security
@@ -141,7 +141,7 @@ async function loadEvents() {
   const listed=[...(data||[]),...privateEvents].sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
   eventCache=[...listed];
   if (invitedEvent && !eventCache.some(e=>e.id===invitedEvent.id)) eventCache.push(invitedEvent);
-  if (publicEventId !== null) renderPublicEventDetail(data||[]);
+  if (publicEventId !== null) return renderPublicEventDetail(data||[]);
   if (!listed.length) {
     $("events").innerHTML='<div class="empty-state"><span class="pill">Coming soon</span><h3>No sessions posted yet</h3><p>Check back soon for the next open gym.</p></div>';
     return;
@@ -361,8 +361,8 @@ async function loadInvitedEvent() {
   $("invitation-event").innerHTML=eventDetailPage(invitedEvent, true);
   void loadEventRoster(invitedEvent, true);
   document.title = `${invitedEvent.title} | Colorado Springs Pickup Volleyball`;
+  eventCache=[invitedEvent];
   wireRegistrationButtons($("invitation-event"));
-  await loadEvents();
 }
 
 // Calendar files contain only event details, never player emails, invitation
@@ -641,7 +641,9 @@ $("login-form").addEventListener("submit",async ev=>{
 $("signout").addEventListener("click",async()=>{
   await supabase.auth.signOut();await refreshAdmin();
 });
-supabase?.auth.onAuthStateChange(()=>setTimeout(refreshAdmin,0));
+supabase?.auth.onAuthStateChange(event=>{
+  if (event !== "INITIAL_SESSION") setTimeout(refreshAdmin,0);
+});
 
 // ── Phase 10: organizer-only player access rules ───────────────────────────
 // All writes use a SECURITY DEFINER RPC with an independent organizer check.
@@ -1092,11 +1094,29 @@ async function loadAdminEvents(){
     $("admin-events").innerHTML=`<div class="dashboard-empty">${all.length?"No events match this filter.":"No events yet. Use Create event to add your first session."}</div>`;
     return;
   }
-  const parts=await Promise.all(ordered.map(async e=>{
-    const { data:regs, error:rerr } = await  supabase.from("registrations").select("id,player_name,player_email,payment_method,actual_payment_method,payment_status,registration_status,attendance_status,payment_updated_by_email,attendance_updated_by_email,created_at").eq("event_id",e.id).order("created_at");
-    if (!stillCurrent()) return "";
-    if(rerr)return `<article class="admin-event"><h4>${esc(e.title)}</h4><p>${esc(rerr.message)}</p></article>`;
-    const checkinPanel = phase9RosterPanel(e, regs || []);
+  // Keep each filter URL short and page through busy rosters without hitting
+  // the API row limit. Each event's players stay in signup order.
+  const rosterByEvent = new Map(ordered.map(e => [e.id, []]));
+  const rosterErrors = new Map();
+  const pageSize = 500;
+  for (let start = 0; start < ordered.length; start += 40) {
+    const ids = ordered.slice(start, start + 40).map(e => e.id);
+    for (let offset = 0; ; offset += pageSize) {
+      const {data, error} = await supabase.from("registrations")
+        .select("event_id,id,player_name,player_email,payment_method,actual_payment_method,payment_status,registration_status,attendance_status,payment_updated_by_email,attendance_updated_by_email,created_at")
+        .in("event_id", ids).order("created_at").order("id").range(offset, offset + pageSize - 1);
+      if (!stillCurrent()) return;
+      if (error) {
+        for (const id of ids) rosterErrors.set(id, error.message);
+        break;
+      }
+      for (const row of data || []) rosterByEvent.get(row.event_id)?.push(row);
+      if ((data || []).length < pageSize) break;
+    }
+  }
+  const parts = ordered.map(e => {
+    if (rosterErrors.has(e.id)) return `<article class="admin-event"><h4>${esc(e.title)}</h4><p>${esc(rosterErrors.get(e.id))}</p></article>`;
+    const regs = rosterByEvent.get(e.id);
     const registeredCount = (regs || []).filter(r => r.registration_status === "registered").length;
     return `<details class="admin-event admin-event-collapsible" data-admin-collapse-id="${esc(e.id)}" ${adminExpandedEventIds.has(String(e.id)) ? "open" : ""}>
       <summary class="admin-event-collapse-summary" aria-label="Expand or collapse ${esc(e.title)}">
@@ -1121,10 +1141,10 @@ async function loadAdminEvents(){
         ${e.status==="published" ? `<a class="button secondary" href="${esc(e.visibility === "private" ? inviteUrl(e.invite_token) : publicEventUrl(e.id))}" target="_blank" rel="noopener noreferrer" aria-label="View ${esc(e.title)} event in a new tab">View event ↗</a>` : ""}
       </div>
       ${e.visibility==="private"&&e.status!=="published"?'<p class="muted small">The event link will work once the event is published.</p>':''}
-      ${checkinPanel}
+      <div data-roster-container></div>
       </div>
     </details>`;
-  }));
+  });
   if (!stillCurrent()) return;
   const upcomingCards = parts.slice(0, upcoming.length).join("");
   const pastCards = parts.slice(upcoming.length).join("");
@@ -1145,11 +1165,21 @@ async function loadAdminEvents(){
   if (pastSection) pastSection.addEventListener("toggle", () => {
     adminPastEventsExpanded = pastSection.open;
   });
+  const eventsById = new Map(ordered.map(event => [String(event.id), event]));
   $("admin-events").querySelectorAll("[data-admin-collapse-id]").forEach(card => {
+    const id = card.dataset.adminCollapseId;
+    const container = card.querySelector("[data-roster-container]");
+    const renderRoster = () => {
+      if (container.hasChildNodes()) return;
+      container.innerHTML = phase9RosterPanel(eventsById.get(id), rosterByEvent.get(id));
+      wireRosterControls(container);
+    };
+    if (card.open) renderRoster();
     card.addEventListener("toggle", () => {
-      const id = card.dataset.adminCollapseId;
-      if (card.open) adminExpandedEventIds.add(id);
-      else adminExpandedEventIds.delete(id);
+      if (card.open) {
+        adminExpandedEventIds.add(id);
+        renderRoster();
+      } else adminExpandedEventIds.delete(id);
     });
   });
   $("admin-events").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>openEventEditor(shown.find(e=>e.id===b.dataset.edit))));
@@ -1207,30 +1237,33 @@ async function loadAdminEvents(){
     notice(`Permanently deleted: ${event.title}. Associated registrations were removed.`);
     if (!dashboardRequested) await loadEvents();if(validInviteToken)await loadInvitedEvent();await loadAdminEvents();
   }));
+}
+
+function wireRosterControls(container) {
   // Phase 9: Updates persist immediately under the existing organizer RLS.
   // Database trigger records who last changed payment or attendance fields.
-  document.querySelectorAll("[data-payment]").forEach(select => select.addEventListener("change", async () => {
+  container.querySelectorAll("[data-payment]").forEach(select => select.addEventListener("change", async () => {
     select.disabled = true;
-    const method = document.querySelector(`[data-received-method="${select.dataset.payment}"]`)?.value || "venmo";
+    const method = container.querySelector(`[data-received-method="${select.dataset.payment}"]`)?.value || "venmo";
     const update = {payment_status: select.value};
     if (select.value === "paid") update.actual_payment_method = method;
     const {error} = await supabase.from("registrations").update(update).eq("id", select.dataset.payment);
     if (error) window.alert(error.message);
     await phase9RefreshRow(select);
   }));
-  document.querySelectorAll("[data-received-method]").forEach(select => select.addEventListener("change", async () => {
+  container.querySelectorAll("[data-received-method]").forEach(select => select.addEventListener("change", async () => {
     select.disabled = true;
     const {error} = await supabase.from("registrations").update({actual_payment_method: select.value}).eq("id", select.dataset.receivedMethod);
     if (error) window.alert(error.message);
     await phase9RefreshRow(select);
   }));
-  document.querySelectorAll("[data-attendance]").forEach(select => select.addEventListener("change", async () => {
+  container.querySelectorAll("[data-attendance]").forEach(select => select.addEventListener("change", async () => {
     select.disabled = true;
     const {error} = await supabase.from("registrations").update({attendance_status: select.value}).eq("id", select.dataset.attendance);
     if (error) window.alert(error.message);
     await phase9RefreshRow(select);
   }));
-  document.querySelectorAll("[data-unpaid-toggle]").forEach(button => button.addEventListener("click", () => {
+  container.querySelectorAll("[data-unpaid-toggle]").forEach(button => button.addEventListener("click", () => {
     const panel = button.closest(".phase9-checkin");
     const active = panel.classList.toggle("phase9-unpaid-only");
     const eventId = button.dataset.unpaidToggle;
@@ -1239,7 +1272,7 @@ async function loadAdminEvents(){
     button.setAttribute("aria-pressed", String(active));
     button.textContent = active ? "Show all players" : "Show unpaid only";
   }));
-  document.querySelectorAll("[data-cancel]").forEach(b=>b.addEventListener("click",async()=>{
+  container.querySelectorAll("[data-cancel]").forEach(b=>b.addEventListener("click",async()=>{
     if (!confirm("Cancel this registration? If the player holds a confirmed spot, the next waitlisted player will be promoted automatically.")) return;
     b.disabled = true;
     const { error } = await  supabase.from("registrations").update({
@@ -1599,7 +1632,7 @@ if(!configured){
   $("admin-message").textContent="Setup required: add the Supabase URL and anon key in app.js.";
 }
 else {
-  loadEvents();
+  if (!dashboardRequested && inviteToken === null && manageToken === null) loadEvents();
   if (inviteToken !== null) loadInvitedEvent();
   if (manageToken !== null) loadManageRegistration();
   refreshAdmin();
