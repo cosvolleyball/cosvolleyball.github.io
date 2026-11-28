@@ -46,3 +46,9 @@ Public pages use a publishable key. Organizer operations require authentication 
 | An update needs to be withdrawn | Revert the website change and wait for the replacement Pages deployment. Manager API incident recovery is documented separately. |
 
 [Architecture](ARCHITECTURE.md) · [Database recovery](db/release/README.md) · [Maintenance notes](BACKLOG.md)
+
+### Event-day checklist
+
+The organizer dashboard links to the event-day checklist in Teams Manager. Starting a session imports confirmed registrations and keeps waitlisted players pending. During an active session the checklist shows the registered count, no-shows, included walk-ins, and the headcount used to generate teams. Attendance changes apply to the session roster.
+
+Opening **Unpaid players** refreshes the payment list for available players with linked registrations. Selecting the received method and choosing **Mark paid** updates the same registration used by the organizer dashboard. Walk-ins without a registration have no payment record in this list. **Go to team setup** opens the format and team-count controls for the current headcount.

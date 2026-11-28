@@ -373,6 +373,83 @@ function updatePositionPicker(picker, changed) {
 
 // Keep unrelated profile edits and keyboard focus when another player or court updates.
 const savedRosterMarkup = new WeakMap();
+let paymentRequest = 0;
+
+function renderChecklist() {
+  const roster = state.roster;
+  const included = roster.filter(p=>["present","waiting"].includes(p.attendance));
+  const counts = [
+    ["Registered", roster.filter(p=>p.source_status==="registered").length],
+    ["No-shows", roster.filter(p=>p.attendance==="absent").length],
+    ["Walk-ins", included.filter(p=>!p.registration_id && !p.source_status).length],
+    ["Ready for teams", included.length]
+  ];
+  $("tm-checklist-event").textContent = state.snapshot.event_title || "Current session";
+  $("tm-checklist-counts").innerHTML = counts.map(([label,count])=>
+    `<div><dt>${label}</dt><dd>${count}</dd></div>`).join("");
+  void loadChecklistPayments();
+}
+
+async function loadChecklistPayments() {
+  const request = ++paymentRequest;
+  const session = state.snapshot?.session_id, epoch = state.authEpoch;
+  if (!session || !privateRequestIsCurrent(epoch,session)) return;
+  const players = state.roster.filter(p=>p.registration_id && ["present","waiting"].includes(p.attendance));
+  const names = new Map(players.map(p=>[p.registration_id,p.name]));
+  const ids = [...names.keys()];
+  const unpaid = [];
+  const current = ()=>request===paymentRequest && privateRequestIsCurrent(epoch,session);
+  try {
+    for (let i=0; i<ids.length; i+=40) {
+      const {data,error} = await supabase.from("registrations")
+        .select("id,payment_method,actual_payment_method")
+        .in("id",ids.slice(i,i+40)).eq("payment_status","unpaid").neq("registration_status","cancelled");
+      if (!current()) return;
+      if (error) throw error;
+      unpaid.push(...data);
+    }
+    if (!current()) return;
+    $("tm-payment-summary").textContent = "Unpaid players (" + unpaid.length + ")";
+    const methods = {venmo:"Venmo",cash:"Cash",apple_cash:"Apple Cash"};
+    $("tm-checklist-payments").innerHTML = unpaid.length ? unpaid.map(r=>{
+      const name = escapeHtml(names.get(r.id));
+      return `<div class="tm-payment-row"><strong>${name}</strong>
+        <select aria-label="Payment method for ${name}">${Object.entries(methods).map(([value,label])=>
+          `<option value="${value}" ${value===(r.actual_payment_method || r.payment_method)?"selected":""}>${label}</option>`).join("")}</select>
+        <button type="button" class="tm-button tm-secondary" data-mark-paid="${escapeHtml(r.id)}" aria-label="Mark ${name} paid">Mark paid</button></div>`;
+    }).join("") : "<p>No unpaid registrations among the available players.</p>";
+  } catch {
+    if (!current()) return;
+    $("tm-payment-summary").textContent = "Unpaid players · unavailable";
+    $("tm-checklist-payments").textContent = "Couldn’t load payments. Use Refresh payments to retry.";
+  }
+}
+$("tm-refresh-payments").addEventListener("click",loadChecklistPayments);
+$("tm-payment-details").addEventListener("toggle",()=>{
+  if ($("tm-payment-details").open) void loadChecklistPayments();
+});
+$("tm-checklist-payments").addEventListener("click",event=>{
+  const button = event.target.closest("[data-mark-paid]");
+  const session = state.snapshot?.session_id, epoch = state.authEpoch;
+  if (!button || !session || !privateRequestIsCurrent(epoch,session)) return;
+  const id = button.dataset.markPaid, method = button.parentElement.querySelector("select").value;
+  if (!state.roster.some(p=>p.registration_id===id && ["present","waiting"].includes(p.attendance))) return;
+  button.disabled = true;
+  void action(async()=>{
+    try {
+      const {error} = await supabase.from("registrations")
+        .update({payment_status:"paid",actual_payment_method:method})
+        .eq("id",id).eq("payment_status","unpaid").neq("registration_status","cancelled");
+      if (privateRequestIsCurrent(epoch,session) && error) throw error;
+    } finally {
+      if (privateRequestIsCurrent(epoch,session)) {
+        button.disabled = false;
+        await loadChecklistPayments();
+      }
+    }
+  });
+});
+
 function renderRoster() {
   const host = $("tm-roster");
   const available=state.roster.filter(p=>["present","waiting"].includes(p.attendance)).length;
@@ -767,11 +844,16 @@ function renderTransferCorrection() {
   if(snap.teams.some(t=>t.id===prevTeam))team.value=prevTeam;
 }
 
+let checklistRequested = location.hash === "#event-day";
 function renderOrganizer() {
   if(!state.isOrganizer)return;
   const active=Boolean(state.snapshot?.active);
   $("tm-org-empty").hidden=active;
   $("tm-org-active").hidden=!active;
+  if (checklistRequested) {
+    $(active ? "event-day" : "tm-org-empty").scrollIntoView?.();
+    checklistRequested=false;
+  }
   if(!active)return;
   const rotation=state.snapshot;
   const activeRotation=rotation.rotation_status==="published";
@@ -814,6 +896,10 @@ function clearOrganizer(retryAfterNetworkError = false) {
     "tm-replace-player","tm-transfer-correction-player","tm-transfer-correction-team",
     "tm-correct-game","tm-incorrect-player","tm-correct-player"])
     $(id).replaceChildren(new Option("Choose…",""));
+  ++paymentRequest;
+  for (const id of ["tm-checklist-event","tm-checklist-counts","tm-checklist-payments"]) $(id).replaceChildren();
+  $("tm-payment-details").open=false;
+  $("tm-payment-summary").textContent="Unpaid players";
   $("tm-walkin-form").reset();
   $("tm-feedback").hidden=true;
   $("tm-feedback").textContent="";
@@ -840,6 +926,9 @@ async function loadPrivate() {
   ]);
   if(!privateRequestIsCurrent(epoch,session))return;
   if(state.lastPrivateSessionId!==session){
+    $("tm-checklist-payments").replaceChildren();
+    $("tm-payment-summary").textContent="Unpaid players · loading";
+    $("tm-payment-details").open=false;
     $("tm-final-stats").hidden=true;
     $("tm-final-stats-body").replaceChildren();
     state.draft=null;state.savedDraftId=null;state.undoStack=[];
@@ -857,6 +946,7 @@ async function loadPrivate() {
   state.lastPrivateRevision=state.snapshot.revision;
   state.lastPrivateSessionId=session;
   renderRoster();
+  renderChecklist();
   renderOrganizer();
 }
 async function refresh(forcePrivate = false, verifyOrganizer = false) {

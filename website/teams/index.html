@@ -77,6 +77,22 @@
       </div>
 
       <div id="tm-org-active" hidden>
+        <section id="event-day" class="tm-panel tm-checklist" aria-labelledby="tm-checklist-title">
+          <h3 id="tm-checklist-title">Event-day checklist</h3>
+          <p id="tm-checklist-event"></p>
+          <dl id="tm-checklist-counts" class="tm-checklist-counts"></dl>
+          <details id="tm-payment-details">
+            <summary id="tm-payment-summary">Unpaid players</summary>
+            <p>Includes available players with an unpaid event registration. Walk-ins without a registration have no payment record here.</p>
+            <div id="tm-checklist-payments"></div>
+            <button type="button" id="tm-refresh-payments" class="tm-button tm-secondary">Refresh payments</button>
+          </details>
+          <div class="tm-buttons">
+            <a href="#tm-roster-heading" class="tm-button tm-secondary">Review attendance</a>
+            <a href="#tm-walkin-name" class="tm-button tm-secondary">Add walk-in</a>
+            <a href="#tm-draft-title" class="tm-button">Go to team setup</a>
+          </div>
+        </section>
         <section class="tm-panel" aria-labelledby="tm-roster-heading">
           <div class="tm-section-heading">
             <h3 id="tm-roster-heading">Attendance and private player profiles</h3>
