@@ -14,7 +14,7 @@ const profileCode=fs.readFileSync(path.join(root,"profile-options.mjs"),"utf8").
 
 async function boot({initialSnapshot,organizer=false,organizerRoster=[],
   organizerAppearances={},transferHistory=[],
-  staging=true,rpcOverride=null}={}){
+  registrationsClient=null,staging=true,rpcOverride=null}={}){
   const dom=new JSDOM(page,{
     url:"https://test.local/teams/",
     runScripts:"outside-only",
@@ -52,6 +52,7 @@ async function boot({initialSnapshot,organizer=false,organizerRoster=[],
       onAuthStateChange(callback){authCallback=callback;return {data:{subscription:{unsubscribe(){}}}};}
     },
     from(table){
+      if (table==="registrations" && registrationsClient) return registrationsClient;
       return {
         select:()=>({
           eq:()=>({
@@ -715,4 +716,41 @@ test("an unchanged session returns after an interrupted refresh",async()=>{
     assert(!doc.querySelector("#tm-organizer").hidden);
     assert.match(doc.querySelector("#tm-roster").textContent,/Private Player/);
   }finally{t.close();}
+});
+
+test("Event-day checklist uses available players and records the received payment method", async()=>{
+  let paid=false, receivedMethod, queried;
+  const guards=[];
+  const payments={
+    select(){return {in(column,ids){queried=[...ids];return this;},eq(){return this;},
+      neq(){return {data:paid?[]:[{id:"registration",payment_method:"venmo"}]};}};},
+    update(values){
+      paid=values.payment_status==="paid";receivedMethod=values.actual_payment_method;
+      return {eq(k,v){guards.push([k,v]);return this;},neq(){return {error:null};}};
+    }
+  };
+  const organizerRoster=[
+    {id:"p1",name:"Available player",attendance:"present",source_status:"registered",registration_id:"registration"},
+    {id:"p2",name:"Absent player",attendance:"absent",source_status:"registered",registration_id:"absent"},
+    {id:"p3",name:"Walk-in",attendance:"present",source_status:null},
+    {id:"p4",name:"Waitlisted",attendance:"candidate",source_status:"waitlisted",registration_id:"pending"}
+  ];
+  const t=await boot({organizer:true,registrationsClient:payments,organizerRoster,initialSnapshot:{
+    active:true,session_id:"session",format:6,revision:1,event_title:"Friday volleyball",teams:[],games:[]
+  }});
+  try {
+    const d=t.dom.window.document;
+    assert.deepEqual(queried,["registration"]);
+    assert.deepEqual([...d.querySelectorAll("#tm-checklist-counts dd")].map(x=>x.textContent),["2","1","1","2"]);
+    assert.equal(d.querySelector("#tm-payment-summary").textContent,"Unpaid players (1)");
+    d.querySelector(".tm-payment-row select").value="cash";
+    d.querySelector("[data-mark-paid]").click();
+    await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal(receivedMethod,"cash");
+    assert.deepEqual(guards,[["id","registration"],["payment_status","unpaid"]]);
+    assert.equal(d.querySelector("#tm-payment-summary").textContent,"Unpaid players (0)");
+    t.signOut();
+    assert.equal(d.querySelector("#tm-checklist-payments").textContent,"");
+    assert.equal(d.querySelector("#tm-checklist-counts").textContent,"");
+  } finally {t.close();}
 });
